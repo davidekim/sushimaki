@@ -3,7 +3,7 @@
 ![header.png](./header.png)
 
 ## Description
-This repo includes a script that generates helical or beta barrel WRAPs parametrically around a target transmembrane protein.
+This repo includes a script that generates helical or beta barrel WRAPs parametrically around a target protein.
 
 ## Reference
 Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science.
