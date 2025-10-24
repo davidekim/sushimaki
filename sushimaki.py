@@ -28,6 +28,8 @@ partial_diffusion_partialT = 20
 # pip3 install pybiolib
 #
 #
+# Reference for WRAPs
+#   Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science.
 #
 # Reference for parametrically guided beta barrel backbone design:
 #   Kim DE. et al. 2024. Parametrically guided design of soluble beta barrels and transmembrane nanopores using deep learning.
@@ -41,20 +43,21 @@ partial_diffusion_partialT = 20
 installdir = os.path.dirname(os.path.abspath(__file__))
 os.environ['CLASSPATH'] = f'{installdir}/bioshell.bioinformatics-2.2/bioshell.bioinformatics-2.2.jar:{installdir}/bioshell.bioinformatics-2.2/bioshell.bioinformatics-2.2-mono.jar'
 
-# beta wrap parameters
+## beta wrap parameters
 intra_strand_dist =  3.8
 inter_strand_dist =  4.8
-beta_radius_buffer_max = 10
-beta_radius_buffer_min = 8
 beta_tmheight_buffer = 1
 termlen = 3
+# to determine gap distances to sample between target and barrel wrap
+beta_radius_buffer_max = 10 
+beta_radius_buffer_min = 8
 
-# helix wrap parameters
+## helix wrap parameters
 rbuffer = 6 # to add to transmembrane radius calculation to determine number of helices
 hbuffer = 5 # to add to tmheight for helix length
 
+## general params
 max_dist_per_loop_res = 2.6 # to prevent loop modeling from hanging, this is the maximum distance per residue to be built between the start and stop CA positions. If the gap is too far apart to connect with loop modeling, the model will be skipped.
-
 blen = 1 # len for inner and outer coords for superposition into cylinder
 
 import textwrap
@@ -73,7 +76,7 @@ parser = argparse.ArgumentParser(
 
          '''))
 
-parser.add_argument('--barrel_wrap', type=bool, default=False, help='Wrap with a beta barrel. n, nres, and radius will be automatically sampled. Helices are used by default.')
+parser.add_argument('--barrel', default=False, action='store_true', help='Wrap with a beta barrel. n, nres, and radius will be automatically sampled. Helices are used by default.')
 parser.add_argument('--n', type=int, default=0, help='Manually set n (helix count).')
 parser.add_argument('--nres', type=int, default=0, help='Manually set nres (helix length).')
 parser.add_argument('--radius', type=float, default=0, help='Manually set radius for helix wrap.')
@@ -104,25 +107,19 @@ parser.add_argument(
 
 parser.add_argument(
         '--all_residues_to_wrap',
-        help='Residue numbers separated by spaces to wrap. The default is to use DeepTMHMM to identify transmembrane residues to wrap.',
+        help='Residue numbers separated by spaces to wrap. Requires --top_residues_to_wrap and --bottom_residues_to_wrap. The default is to use DeepTMHMM to determine these values but you can manually set them, for example, to wrap soluble targets.',
         action='store',
         nargs='+',
         default=[]
         )
 
-parser.add_argument(
-        '--pdbs',
-        help='Input PDBs.',
-        action='store',
-        required=True,
-        nargs='+'
-        )
+parser.add_argument('pdbs', nargs=argparse.REMAINDER, help='Input PDBs.')
 
 args = vars(parser.parse_args())
 exit = False
 
 partial_diffusion_task_file = args['partial_diffusion_task_file']
-barrel_wrap = args['barrel_wrap']
+barrel_wrap = args['barrel']
 close_loops = args['add_loops']
 looplen = args['looplen']
 rotation_sample_angle = args['rot_angle']
@@ -174,8 +171,6 @@ for v in bottom_residues_to_wrap_:
     print(f'ERROR parsing bottom_residues_to_wrap!')
     sys.exit(1)
     
-
-
 pdbs = []
 if args['pdbs']:
   for pdb in args['pdbs']:
@@ -189,6 +184,8 @@ if args['pdbs']:
             pdbs.append(pdb)
 else:
   exit = True
+if len(pdbs) == 0: exit = True
+
 if exit:
   parser.print_help(sys.stderr)
   sys.exit(1)
@@ -423,6 +420,7 @@ def closeloops(pose):
     Nposs.append(i*nres+1)
   pose, loops, skip = add_loops(pose,Nposs,Cposs)
   if not skip:
+    print(f'Closing loops... if this hangs for more than a minute ctrl-z and kill the process w/ (kill -9 {os.getpid()}) and try different radius and/or looplen. The gap is too large to close.')
     lm = protocols.loop_modeler.LoopModeler()
     lm.set_loops(loops)
     lm.enable_build_stage()
@@ -694,7 +692,7 @@ for pdb in pdbs:
           atomi += 4
       foA.close()
 
-      outprefix = f'{input_pdb_name}_WRAP_barrel_n{nstrands}_S{shear}_nres{nres_per_strand}_tradius{radius:.0f}_cradius{barrel_r:.0f}_cheight{barrel_h:.0f}'
+      outprefix = f'{input_pdb_name}_WRAP_barrel_n{nstrands}_S{shear}_nres{nres_per_strand}_looplen{looplen}_tradius{radius:.0f}_cradius{barrel_r:.0f}_cheight{barrel_h:.0f}'
       if os.path.exists(outprefix+'.pdb'):
         print(f'{outprefix}.pdb already exists.. skipping')
         continue
@@ -867,22 +865,20 @@ for pdb in pdbs:
       # add target back
       p_flipped = append_chain_to_pose(p_flipped,p_copy_flipped)
     
-      # close loops (for some reason this gets stuck in an infinite loop somewhere somehow in pyrosetta !! why??
+      # close loops 
       if close_loops:
+        print(f'Closing loops... if this hangs for more than a minute ctrl-z and kill the process w/ (kill -9 {os.getpid()}) and try different radius and/or looplen. The gap is too large to close.')
         lm = protocols.loop_modeler.LoopModeler()
         lm.set_loops(loops)
         lm.enable_build_stage()
         lm.disable_centroid_stage()
         lm.disable_fullatom_stage()
-        print("Closing loops...")
         lm.apply(p)
     
         lm.set_loops(loops_flipped)
         lm.enable_build_stage()
         lm.disable_centroid_stage()
         lm.disable_fullatom_stage()
-        print("Closing loops...")
-    
         lm.apply(p_flipped)
     
       p_orig = Pose()
@@ -1116,7 +1112,7 @@ for pdb in pdbs:
           prewraps.append([rotation,outp,direction])
   
         for p in prewraps:
-          outprefix = f'{input_pdb_name}_WRAP_helix_n{n}_nres{nres}_tradius{radius:.0f}_rot{p[0]}_wrap_{termini}_direction{p[2]}'
+          outprefix = f'{input_pdb_name}_WRAP_helix_n{n}_nres{nres}_looplen{looplen}_tradius{radius:.0f}_rot{p[0]}_wrap_{termini}_direction{p[2]}'
   
           if os.path.exists(f'{outprefix}.pdb'):
             continue
@@ -1156,8 +1152,6 @@ for pdb in pdbs:
           # close loops?
           # this may hang... ughh
           if close_loops:
-      
-            print(f'Closing loops... if this hangs for more than a minute ctrl-z and kill the process w/ (kill -9 {os.getpid()}) and try different radius and/or looplen aggghhh..')
             pwrap, skip = closeloops(pwrap)
             if skip: continue
 
