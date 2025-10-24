@@ -7,6 +7,7 @@ import glob
 import argparse
 import biolib
 
+# For partial diffusion commands file
 # Optional, point to your RFdiffusion installation
 rf_diffusion_container = "/software/containers/SE3nv.sif"
 rf_diffusion = "/projects/ml/rf_diffusion/run_inference.py"
@@ -85,7 +86,7 @@ parser.add_argument('--h_rot_angle', type=float, default=0, help='Rotate angle o
 parser.add_argument('--rot_n', type=int, default=3, help='Manually set rotation samples.')
 parser.add_argument('--add_loops', type=bool, default=True, help='Add loops.')
 parser.add_argument('--looplen', type=int, default=3, help='Loop length.')
-parser.add_argument('--partial_diffusion_task_file', type=str, default="partial_diffusion_task_file.txt", help='RF partial diffusion task file.')
+parser.add_argument('--partial_diffusion_task_file', type=str, default="partial_diffusion_task_file.txt", help='RF partial diffusion task file output.')
 parser.add_argument('--debug', type=bool, default=False, help='Debug.')
 parser.add_argument('--verbose', type=bool, default=False, help='Verbose output.')
 
