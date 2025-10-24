@@ -3,7 +3,7 @@
 ![header.png](./header.png)
 
 ## Description
-This repo includes a script that generates helical or beta barrel WRAPs parametrically around a target protein to use as input for RF partial diffusion refinement.
+This repo includes utility scripts to generate helical or beta barrel WRAPs parametrically around a target protein.
 
 ## Reference
 Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science.
@@ -13,7 +13,7 @@ You can clone this repo into a preferred destination directory by going to that 
 
 `git clone https://github.com/davidekim/sushimaki.git`
 
-### For complete pipeline to generate WRAPs
+### For a complete pipeline to generate WRAPs
 Install ppi_iterative_opt submodule for RF partial diffusion, ProteinMPNN, and Alphafold2 protein-protein interaction design optimization.
 
 ~~~
