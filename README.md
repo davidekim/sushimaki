@@ -17,8 +17,8 @@ You can clone this repo into a preferred destination directory by going to that 
 sushimaki.py is the main script that generates WRAPed inputs for RF partial diffusion structure refinement.
 
 ~~~
-python ../sushimaki.py 2ge4A.pdb
-python ../sushimaki.py --barrel 2ge4A.pdb
+python ./sushimaki.py 2ge4A.pdb
+python ./sushimaki.py --barrel 2ge4A.pdb
 ~~~
 
 ### Dependencies
