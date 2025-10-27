@@ -22,7 +22,7 @@ git submodule init
 git submodule update
 ~~~
 
-Complete ppi_iterative_opt installation by following instructions at https://github.com/davidekim/ppi_iterative_opt.
+Complete ppi_iterative_opt installation by following instructions at https://github.com/davidekim/ppi_iterative_opt and the websites of the dependencies.
 
 
 ### Dependencies
