@@ -7,32 +7,34 @@ import glob
 import argparse
 import biolib
 
+debug = 0
 
-# For partial diffusion commands file
-# Optional, point to your RFdiffusion installation
+# For partial diffusion commands output file
+# Point to your RFdiffusion installation
+# Refer to https://github.com/RosettaCommons/RFdiffusion
 rf_diffusion_container = "/software/containers/SE3nv.sif"
 rf_diffusion = "/projects/ml/rf_diffusion/run_inference.py"
-partial_diffusions = 100
-partial_diffusion_partialT = 20
+rf_partial_diffusions = 10
+rf_partial_diffusion_partialT = 20
 
 # Dependencies
 #
 # PyRosetta
 # https://www.pyrosetta.org
-# 
-# BBQ (requires Java). Jar files are provided in this repo. Please cite Gront et. al.
-# Gront, D., Kmiecik, S. and Kolinski, A. (2007), Backbone building from quadrilaterals: A fast and accurate 
-# algorithm for protein backbone reconstruction from alpha carbon coordinates. J. Comput. Chem., 28: 1593-1597. 
-# https://doi.org/10.1002/jcc.20624
 #
+# For predicting the transmembrane region of the target protein
 # DeepTMHMM
 # Jeppe Hallgren, Konstantinos D. Tsirigos, Mads D. Pedersen, José Juan Almagro Armenteros, Paolo Marcatili, 
 # Henrik Nielsen, Anders Krogh and Ole Winther (2022). DeepTMHMM predicts alpha and beta transmembrane proteins 
-# using deep neural networks.
-# https://doi.org/10.1101/2022.04.08.487609
-#
+# using deep neural networks. https://doi.org/10.1101/2022.04.08.487609
 # https://dtu.biolib.com/DeepTMHMM
 # pip3 install pybiolib
+#
+# For building backbones of parametric beta barrel cylinders
+# BBQ (requires Java). Jar files are provided in this repo. 
+# Gront, D., Kmiecik, S. and Kolinski, A. (2007), Backbone building from quadrilaterals: A fast and accurate 
+# algorithm for protein backbone reconstruction from alpha carbon coordinates. J. Comput. Chem., 28: 1593-1597. 
+# https://doi.org/10.1002/jcc.20624
 #
 # Reference for WRAPs
 #   Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science.
@@ -45,26 +47,32 @@ partial_diffusion_partialT = 20
 #   Dou, J. et al. Nature, 2018. De novo design of a fluorescence-activating β-barrel. 
 #
 
-# For BBQ
+# Set CLASSPATH for BBQ 
 installdir = os.path.dirname(os.path.abspath(__file__))
 os.environ['CLASSPATH'] = f'{installdir}/bioshell.bioinformatics-2.2/bioshell.bioinformatics-2.2.jar:{installdir}/bioshell.bioinformatics-2.2/bioshell.bioinformatics-2.2-mono.jar'
 
 ## beta wrap parameters
 intra_strand_dist =  3.8
 inter_strand_dist =  4.8
-beta_tmheight_buffer = 1
-termlen = 3
-# to determine gap distances to sample between target and barrel wrap
-beta_radius_buffer_max = 10 
+beta_tmheight_buffer_max = 8
+beta_tmheight_buffer_min = 5
+
+# to determine gap distance range to sample between target and barrel wrap
+beta_radius_buffer_max = 10
 beta_radius_buffer_min = 8
 
 ## helix wrap parameters
-rbuffer = 6 # to add to transmembrane radius calculation to determine number of helices
+rbuffer = 5 # to add to transmembrane radius calculation to determine number of helices
 hbuffer = 5 # to add to tmheight for helix length
 
-## general params
-max_dist_per_loop_res = 2.6 # to prevent loop modeling from hanging, this is the maximum distance per residue to be built between the start and stop CA positions. If the gap is too far apart to connect with loop modeling, the model will be skipped.
-blen = 1 # len for inner and outer coords for superposition into cylinder
+## General params
+
+# For loop modeling, this is the maximum distance per residue between loop start and stop CA positions.
+# If the gap is too large, the wrap will be skipped.
+max_dist_per_loop_res = 4.5 
+
+# len for inner and outer coords for superposition into cylinder
+blen = 2
 
 import textwrap
 parser = argparse.ArgumentParser(
@@ -77,12 +85,9 @@ parser = argparse.ArgumentParser(
                 https://dtu.biolib.com/DeepTMHMM (pip3 install pybiolib)
                 --n is calculated as a function of the approximate TM radius.
                 --nres is calculated as a function of the approximate TM height.
-             If you choose --n that is too small or big to connect helices with --looplen
-             loop modeling may hang. You may have to increase --looplen and/or --radius.
 
          '''))
 
-parser.add_argument('--barrel', default=False, action='store_true', help='Wrap with a beta barrel. n, nres, and radius will be automatically sampled. Helices are used by default.')
 parser.add_argument('--n', type=int, default=0, help='Manually set n (helix count).')
 parser.add_argument('--nres', type=int, default=0, help='Manually set nres (helix length).')
 parser.add_argument('--radius', type=float, default=0, help='Manually set radius for helix wrap.')
@@ -90,10 +95,13 @@ parser.add_argument('--rot_angle', type=int, default=30, help='Manually set rota
 parser.add_argument('--h_rot_angle', type=float, default=0, help='Rotate angle of helices in wrap relative to target.')
 parser.add_argument('--rot_n', type=int, default=3, help='Manually set rotation samples.')
 parser.add_argument('--looplen', type=int, default=3, help='Loop length.')
-parser.add_argument('--partial_diffusion_task_file', type=str, default="partial_diffusion_task_file.txt", help='RF partial diffusion task file output.')
-parser.add_argument('--wrap', type=str, default='', help='Try to place this PDB as a wrap. i.e. this input is a pre-made wrap. --wrap_top_resi and --wrap_bottom_resi may be automatically assigned for symmetric helical up and down wraps using DSSP.')
+parser.add_argument('--partial_diffusion_task_file_prefix', type=str, default="partial_diffusion_task_file", help='RF partial diffusion task file output prefix.')
+parser.add_argument('--wrap', type=str, default='', help='Try to place this PDB as a wrap. i.e. this input is a pre-made wrap. --wrap_top_resi and --wrap_bottom_resi may be automatically assigned for helical up and down wraps using DSSP.')
 parser.add_argument('--wrap_top_resi', type=str, default='', help='Wrap top comma separated resi for superposition.')
 parser.add_argument('--wrap_bottom_resi', type=str, default='', help='Wrap bottom comma separated resi for superposition.')
+parser.add_argument('--wrap_barrel_params', type=str, default='', help='Assign wrap_top_resi and wrap_bottom_resi based on comma separated barrel params n,nres,looplen,terminilen.')
+parser.add_argument('--barrel', default=False, action='store_true', help='Wrap with a beta barrel. n, nres, and radius will be automatically sampled. Helices are used by default.')
+parser.add_argument('--barrel_termini_len', type=int, default=3, help='N and C terminal extension length for barrel wraps.')
 parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output.')
 
 parser.add_argument(
@@ -125,8 +133,10 @@ parser.add_argument('pdbs', nargs=argparse.REMAINDER, help='Input PDBs.')
 args = vars(parser.parse_args())
 exit = False
 
-partial_diffusion_task_file = args['partial_diffusion_task_file']
+partial_diffusion_task_file_prefix = args['partial_diffusion_task_file_prefix']
 barrel_wrap = args['barrel']
+termlen = args['barrel_termini_len']
+barrel_wrap_params_str = args['wrap_barrel_params']
 looplen = args['looplen']
 rotation_sample_angle = args['rot_angle']
 h_rot_angle = args['h_rot_angle']
@@ -204,7 +214,6 @@ if exit:
   parser.print_help(sys.stderr)
   sys.exit(1)
 
-debug = 1
 
 from pyrosetta import *
 from pyrosetta.rosetta import *
@@ -216,22 +225,24 @@ from pyrosetta.rosetta.std import (
 )
 from pyrosetta.rosetta.numeric import xyzVector_double_t
 
-if verbose:
-  init( "-beta_nov16 " )
+if verbose or debug:
+  init( " -max_kic_build_attempts 100 -out:level 10000 " )
 else:
-  init( "-beta_nov16 -mute all" )
+  init( " -max_kic_build_attempts 100 -mute all " )
+
 
 # PARAM n (number of helices function of TM radius)
+# 110/16 circumference divided by 16 = 6.875 based on 8efo example w/ 16 helices <- LJ's original count
 def number_of_helices(radius):
   if manual_n > 0:
     return manual_n
-  return int(np.pi*2*(radius+rbuffer)/7) # 110/16 circumference divided by 16 = 6.875 based on 8efo example w/ 16 helices <- LJ's original count
+  return int(np.pi*2*(radius+rbuffer)/6.875) 
 
 # PARAM radius (if manual_n and no manual_radius)
 def radius_from_n(n):
   if manual_radius > 0:
     return manual_radius
-  return (n*7/(np.pi*2))-rbuffer
+  return (n*6.875/(np.pi*2))-rbuffer
 
 # PARAM nres (length of helix as a function of TM height)
 # 3.6 res/turn 5.4 angstroms rise/turn;
@@ -239,6 +250,16 @@ def helix_length(tmheight):
   if manual_nres > 0:
     return manual_nres
   return int(((tmheight+hbuffer)/5.4)*3.6)
+
+def generate_helix(n):
+  aa = ''
+  for i in range(n):
+    aa += 'A'
+  hp = pose_from_sequence(aa, "fa_standard")
+  for i in range(1,n+1):
+    hp.set_phi(i, -57)
+    hp.set_psi(i, -47)
+  return hp
 
 def append_chain_to_pose(p1a,p2a,chain=1,new_chain=True):
   jumpadded = False
@@ -266,7 +287,6 @@ def get_transmembrane_residues(pose, input_pdb_name):
     deeptmhmm_job = deeptmhmm.cli(args=f'--fasta {input_pdb_name}_tmp.fasta') # Blocks until done
     deeptmhmm_job.save_files(f'{input_pdb_name}_DeepTMHMM') # Saves all results to `result` dir
     os.remove(f'{input_pdb_name}_tmp.fasta')
-
   trans = []
   outer = []
   inner = []
@@ -281,26 +301,24 @@ def get_transmembrane_residues(pose, input_pdb_name):
           if l[i] == 'M' or l[i] == 'B' or l[i] == '1' or l[i] == '2':
             trans.append(i+1)
             tlen = len(trans)
-
             if i==0 or l[i-1] == 'O': # input Nterm is outer
-              for add in range(0,blen+1):
+              for add in range(0,blen):
                 outer.append(tlen+add)
                 outer_trans.append(i+1+add)
             elif l[i+1] == 'O':
-              for sub in range(0,blen+1):
+              for sub in range(0,blen):
                 outer.append(tlen-sub)
                 outer_trans.append(i+1-sub)
             elif l[i-1] == 'I' or l[i-1] == 'P' or l[i-1] == 'S' or l[i-1] == 'X':
-              for add in range(0,blen+1):
+              for add in range(0,blen):
                 inner.append(tlen+add)
                 inner_trans.append(i+1+add)
             elif i == llen-1 or (l[i+1] == 'I' or l[i+1] == 'P' or l[i+1] == 'S' or l[i+1] == 'X'): # input Cterm is inner
-              for sub in range(0,blen+1):
+              for sub in range(0,blen):
                 inner.append(tlen-sub)
                 inner_trans.append(i+1-sub)
         break
       lcnt += 1
-
   print(f'get_transmembrane_residues from: {tmpred}..')
   print('+'.join(map(str,trans)))
   print('outer trans: '+'+'.join(map(str,outer_trans)))
@@ -319,55 +337,24 @@ def center_of_mass(xyzVec):
   cofm /= cnt
   return cofm 
 
-def generate_helix(n):
-  aa = ''
-  for i in range(n):
-    aa += 'A'
-  hp = pose_from_sequence(aa, "fa_standard") 
-  for i in range(1,n+1):
-    hp.set_phi(i, -57)
-    hp.set_psi(i, -47)
-  return hp
-
-def add_loops_to_strands(pose,nstrands,nresstrand,looplen):
-  # add loops to cylinder
-  p = Pose()
-  skip = False
-  for res in pyrosetta.rosetta.core.pose.get_chain_residues(pose,1):
-    core.conformation.remove_upper_terminus_type_from_conformation_residue(pose.conformation(), res.seqpos())
-    core.conformation.remove_lower_terminus_type_from_conformation_residue(pose.conformation(), res.seqpos())
-    p.append_residue_by_bond(res)
-  inserted = 0
-  loops = protocols.loops.Loops()
-  for i in range(1,nstrands):  # strands
-    previous = i*nresstrand+inserted
-    for j in range(looplen):
-      insertpos = i*nresstrand+inserted
-      res_type = core.chemical.ChemicalManager.get_instance().residue_type_set( 'fa_standard' ).get_representative_type_name1('A')
-      residue = core.conformation.ResidueFactory.create_residue(res_type)
-      p.append_polymer_residue_after_seqpos(residue, insertpos, True)
-      inserted += 1
-    cutpoint = previous+looplen
-
-    # see if distance is feasable
-    start_stop_dist = (p.residue(previous).atom(2).xyz()-p.residue(cutpoint+1).atom(2).xyz()).norm()
-    skip = False
-    if verbose: print(f'nstrands: {nstrands} nresstrand: {nresstrand} endpoints {previous} {cutpoint+1} {start_stop_dist} / looplen {looplen} {start_stop_dist/looplen}')
-    if start_stop_dist/looplen > max_dist_per_loop_res:
-      print(f'endpoints {start_stop_dist} / looplen {looplen} {start_stop_dist/looplen} > {max_dist_per_loop_res} so cannot close loops. Increase looplen.')
-
-      skip = True
-
-    loop = protocols.loops.Loop(previous, cutpoint+1, cutpoint, 0.0, True)
-    loops.add_loop(loop)
-    protocols.loops.set_single_loop_fold_tree(p, loop)
-    # extend loops before closing
-    for l in range(loop.start()+1,loop.stop()):
-      core.conformation.idealize_position(l, p.conformation())
-      p.set_phi(l, -150.0)
-      p.set_psi(l, +150.0)
-      p.set_omega(l, 180.0)
-  return p, loops, skip
+def set_loop_omega(p,pos,isN):
+  thisp = Pose()
+  thisp.assign(p)
+  osdist1 = 0
+  if isN:
+    odist1 = (thisp.residue(pos-1).atom('O').xyz() - p.residue(pos).atom('H').xyz()).norm()
+  else:
+    odist1 = (thisp.residue(pos).atom('O').xyz() - p.residue(pos+1).atom('H').xyz()).norm()
+  thisp.set_omega(pos, thisp.omega(pos)+180.)
+  osdist2 = 0
+  if isN:
+    odist2 = (thisp.residue(pos-1).atom('O').xyz() - p.residue(pos).atom('H').xyz()).norm()
+  else:
+    odist2 = (thisp.residue(pos).atom('O').xyz() - p.residue(pos+1).atom('H').xyz()).norm()
+  if odist1 > odist2:
+    return p
+  else:
+    return thisp
 
 def add_loops(pose,Nposs,Cposs):
   # add loop
@@ -385,7 +372,7 @@ def add_loops(pose,Nposs,Cposs):
     cutpoint = 0
     for j in range(looplen):
       insertpos = Cpos+inserted
-      res_type = core.chemical.ChemicalManager.get_instance().residue_type_set( 'fa_standard' ).get_representative_type_name1('G')
+      res_type = core.chemical.ChemicalManager.get_instance().residue_type_set( 'fa_standard' ).get_representative_type_name1('A')
       residue = core.conformation.ResidueFactory.create_residue(res_type)
       if j < looplen/2:
         cutpoint = insertpos+1
@@ -394,81 +381,98 @@ def add_loops(pose,Nposs,Cposs):
       else:
         p.prepend_polymer_residue_before_seqpos(residue, insertpos+1, True)
 
-    # see if distance is feasable
-    start_stop_dist = (p.residue(Cpos).atom(2).xyz()-p.residue(Cpos+looplen+1).atom(2).xyz()).norm()
+    lstart = Cpos
+    lstop = Cpos+looplen+1
+    loop = protocols.loops.Loop(lstart, lstop, cutpoint, 0.0, True)
+    loop.set_extended( True )
+    loops.add_loop(loop)
+    protocols.loops.set_single_loop_fold_tree(p, loop)
+    for i in range(lstop,cutpoint,-1):
+      p = set_loop_omega(p,i,False)
+    for i in range(lstart,cutpoint+1):
+      p = set_loop_omega(p,i,True)
+    added = len(p.sequence())-pstartlen
+    start_stop_dist = (p.residue(Cpos-1).atom(2).xyz()-p.residue(Cpos+looplen+2).atom(2).xyz()).norm()
     skip = False
     if verbose: print(f'endpoints {Cpos} {Cpos+looplen+1} {start_stop_dist} / looplen {looplen} {start_stop_dist/looplen}')
     if start_stop_dist/looplen > max_dist_per_loop_res:
       print(f'endpoints {start_stop_dist} / looplen {looplen} {start_stop_dist/looplen} > {max_dist_per_loop_res} so cannot close loops. Increase looplen.')
       skip = True
-
-    loop = protocols.loops.Loop(Cpos, Cpos+looplen+1, cutpoint, 0.0, True)
-    loops.add_loop(loop)
-    protocols.loops.set_single_loop_fold_tree(p, loop)
-    # extend loops before closing
-    for l in range(loop.start()+1,loop.stop()):
-      core.conformation.idealize_position(l, p.conformation())
-      p.set_phi(l, -150.0)
-      p.set_psi(l, +150.0)
-      p.set_omega(l, 180.0)
-
-    added = len(p.sequence())-pstartlen
     if verbose: print(f'Added loop: {Cpos} {Cpos+looplen+1} {cutpoint}')
   return p, loops, skip
+
+def is_closed(pose, loops):
+  maxd = 7. # allow some play since partial diffusion may fix the breaks
+  highd = 0.
+  for i in range(1, loops.size()+1):
+    d = (pose.residue(loops[i].cut()).atom('CA').xyz()-pose.residue(loops[i].cut()+1).atom('CA').xyz()).norm()
+    if verbose: print(f'Loop {i} cut distance: {d}')
+    if d > highd: highd = d
+  if highd > maxd: return False
+  return True
 
 def closeloops(nss, ss_nres, pose):
   Nposs = []
   Cposs = []
-
   for i in range(1,nss):
     Cposs.append(i*ss_nres)
     Nposs.append(i*ss_nres+1)
   pose, loops, skip = add_loops(pose,Nposs,Cposs)
   if not skip:
     if debug: pose.dump_pdb('pre_close.pdb')
-    print(f'Closing length {looplen} loops... if this hangs for more than a minute ctrl-z and kill the process w/ (kill -9 {os.getpid()}) and increase looplen. The gap is too large to close.')
+    print(f'Attempting to close length {looplen} loops...')
+    # Note LoopModeler may not be successful at closing loops for various reasons
+    # This should be replaced with a more robust quick and rough loop modeler in the future.
+    # The loops do not have to be accurate or physically realistic since RF partial diffusion
+    # will refine the WRAP structure.
     lm = protocols.loop_modeler.LoopModeler()
     lm.set_loops(loops)
-    lm.enable_build_stage()
     lm.disable_centroid_stage()
     lm.disable_fullatom_stage()
     lm.apply(pose)
+    if not is_closed(pose, loops):
+      print(f'Loops could not close so skipping..')
+      skip = True
   return pose, skip
 
+def get_top_bottom_coords(ss_p,nss,ss_nres,offset=0,thislooplen=0,thistermlen=0):
+  # get ss wrap top and bottom coords
+  ctop = []
+  cbottom = []
+  ctopcoords = vector_numeric_xyzVector_double_t()
+  cbottomcoords = vector_numeric_xyzVector_double_t()
+  ccoords = vector_numeric_xyzVector_double_t()
+  for i in range(1, nss+1):
+    clen = (i*ss_nres)+thistermlen+(i-1)*thislooplen
+    for j in range(clen-ss_nres+1,clen+1):
+      ccoords.append(ss_p.residue(j).atom(2).xyz())
+    if not i%2:
+      for add in range(1,blen+1):
+        ctop.append(clen-ss_nres+add+offset)
+      for sub in range(1,blen+1):
+        cbottom.append(clen-sub+1+offset)
+    else:
+      for add in range(1,blen+1):
+        cbottom.append(clen-ss_nres+add+offset)
+      for sub in range(1,blen+1):
+        ctop.append(clen-sub+1+offset)
+  for i in ctop:
+    ctopcoords.append(ss_p.residue(i).atom(2).xyz())
+  for i in cbottom:
+    cbottomcoords.append(ss_p.residue(i).atom(2).xyz())
+  return ctop,cbottom,ctopcoords,cbottomcoords,ccoords
+
+
 final_wraps = []
+# This outputs the final parametric WRAPS sampling +/- rotations
 def save_rotations(p, input_p, nss, ss_nres, output_prefix, termlen, looplen, rotation_samples, move_angle, spinmover_forward=None, spinmover_reverse=None, fix_chain_order=False):
   pose = Pose()
   pose.assign(p)
   if spinmover_forward == None:
-    ctop = []
-    cbottom = []
-    ctopcoords = vector_numeric_xyzVector_double_t()
-    cbottomcoords = vector_numeric_xyzVector_double_t()
-    ccoords = vector_numeric_xyzVector_double_t()
-    for i in range(1, nss+1):
-      clen = (i*ss_nres)+termlen+(i-1)*looplen
-      for j in range(clen-ss_nres+1,clen+1):
-        ccoords.append(pose.residue(j).atom(2).xyz())
-      if not i%2:
-        for add in range(1,blen+1):
-          ctop.append(clen-ss_nres+add+1)
-        for sub in range(1,blen+1):
-          cbottom.append(clen-sub+1)
-      else:
-        for add in range(1,blen+1):
-          cbottom.append(clen-ss_nres+add+1)
-        for sub in range(1,blen+1):
-          ctop.append(clen-sub+1)
-  
-    for i in ctop:
-      ctopcoords.append(pose.residue(i).atom(2).xyz())
-    for i in cbottom:
-      cbottomcoords.append(pose.residue(i).atom(2).xyz())
-  
+    ctop,cbottom,ctopcoords,cbottomcoords,ccoords = get_top_bottom_coords(pose,nss,ss_nres,0,looplen,termlen) 
     # rotate wrap
-    spinmover_forward = protocols.rigid.RigidBodyDeterministicSpinMover(1,center_of_mass(ctopcoords)-center_of_mass(cbottomcoords),center_of_mass(ccoords),move_angle)
-    spinmover_reverse = protocols.rigid.RigidBodyDeterministicSpinMover(1,center_of_mass(ctopcoords)-center_of_mass(cbottomcoords),center_of_mass(ccoords),-1*move_angle)
-  
+    spinmover_forward = protocols.rigid.RigidBodyDeterministicSpinMover(pose.num_jump(),center_of_mass(ctopcoords)-center_of_mass(cbottomcoords),center_of_mass(ccoords),move_angle)
+    spinmover_reverse = protocols.rigid.RigidBodyDeterministicSpinMover(pose.num_jump(),center_of_mass(ctopcoords)-center_of_mass(cbottomcoords),center_of_mass(ccoords),-1*move_angle)
   offset_angle = 0
   # sample angles forward and reverse of original (kept at center)
   for j in range(int(rotation_samples/2)):
@@ -498,11 +502,6 @@ def chain1_len(ca_atoms):
     prevchain = ca[0]
   return chainAlen
 
-def xyzdist(xyz1, xyz2):
-  nxyz1 = np.array(xyz1)
-  nxyz2 = np.array(xyz2)
-  return np.linalg.norm(nxyz1 - nxyz2)
-
 def read_pdb_atom(l):
   chain = l[20:22].strip()
   atype = l[11:17].strip()
@@ -518,24 +517,21 @@ def chain2_contigs(ca_atoms):
   start =  ca_atoms[chain1len][0]+str(ca_atoms[chain1len][3])
   target_chain_breaks = []
   for i in range(chain1len,len(ca_atoms)-1):
-    d = xyzdist(ca_atoms[i][4:7],ca_atoms[i+1][4:7])
+    d = np.linalg.norm( np.array(ca_atoms[i][4:7]) - np.array(ca_atoms[i+1][4:7]) )
     if d > 4.2: # chainbreak
       target_chain_breaks.append(f'{start}-{ca_atoms[i][3]}')
       start = ca_atoms[i+1][0]+str(ca_atoms[i+1][3])
   target_chain_breaks.append(f'{start}-{ca_atoms[-1][3]}')
   return ','.join(target_chain_breaks)
 
-def get_top_bottom_coords_from_DSSP(p_w):
+def get_helices_top_bottom_coords_from_DSSP(p_w):
   ctopcoords = vector_numeric_xyzVector_double_t()
   cbottomcoords = vector_numeric_xyzVector_double_t()
-
   DSSP = pyrosetta.rosetta.core.scoring.dssp.Dssp(p_w)
   ssstr = DSSP.get_dssp_secstruct()
   aastr = p_w.sequence()
-
   prevaa = ''
   ends = []
-
   if verbose:
     print(f'Getting top and bottom coords from DSSP')
     print(ssstr)
@@ -549,7 +545,6 @@ def get_top_bottom_coords_from_DSSP(p_w):
       elif i == len(ssstr)+1:
         ends.append(i+1)
     prevaa = aa
-  
   top = []
   bottom = []
   added = 0
@@ -572,13 +567,12 @@ def get_top_bottom_coords_from_DSSP(p_w):
   if verbose:
     print(f'top {topstr}')
     print(f'bottom {bottomstr}')
-
   return ctopcoords, cbottomcoords
 
 
 ## MAIN
 
-p_w = Pose()
+p_w = Pose() # wrap pose
 ctopcoords = vector_numeric_xyzVector_double_t()
 cbottomcoords = vector_numeric_xyzVector_double_t()
 if len(wrap) > 0:
@@ -586,7 +580,6 @@ if len(wrap) > 0:
   p_w = pose_from_file(wrap)
   # get top and bottom coords of wrap
   if len(wraptopresi) >= 3 and len(wrapbottomresi) >= 3:
-
     # if manually provided
     # get alignment coordinates from input top and bottom resi's
     for i,resi in enumerate(wraptopresi):
@@ -594,28 +587,32 @@ if len(wrap) > 0:
     for i,resi in enumerate(wrapbottomresi):
       cbottomcoords.append(p_w.residue(resi).atom(2).xyz())
   else:
-
-    # try to automatically determine the top and bottom based on DSSP
-    # get alignment coordinates from secondary structure assuming input is up-down H 
-
-    # For helical symmetric wrap inputs only
-    ctopcoords,cbottomcoords = get_top_bottom_coords_from_DSSP(p_w)
+    # did user provide barrel params for input wrap?
+    barrel_wrap_params = list(map(int,barrel_wrap_params_str.split(',')))
+    if len(barrel_wrap_params) > 0:
+      if len(barrel_wrap_params) != 4:
+        print("--wrap_barrel_params requires 4 comma separated values for strand count, strand length, connecting loop length, and termini length.")
+        sys.exit(1)
+      ctop,cbottom,ctopcoords,cbottomcoords,ccoords = get_top_bottom_coords(p_w,barrel_wrap_params[0],barrel_wrap_params[1],0,barrel_wrap_params[2],barrel_wrap_params[3])  
+    else:
+      # For helical symmetric wrap inputs only
+      # try to automatically determine the top and bottom based on DSSP
+      # get alignment coordinates from secondary structure assuming input is up-down H
+      ctopcoords,cbottomcoords = get_helices_top_bottom_coords_from_DSSP(p_w)
 
 for pdb in pdbs:
-
   input_pdb = pdb
   input_pdb_name = input_pdb.split('.pdb')[0].split('/')[-1]
   input_p = pose_from_file(input_pdb)
   input_p_len = len(input_p.sequence())
+  partial_diffusion_task_file_suffix = "" 
+  outprefix = "" # output prefix for this pdb target input
 
-  trans = []
-  top = []
-  bottom = []
-  top_trans = []
-  bottom_trans = []
-
-  outprefix = ""
-
+  trans = [] # residues to wrap (transmembrane residues for example)
+  top = [] # top residues of trans to calculate radius 
+  bottom = [] # bottom residues of trans to calculate radius
+  top_trans = [] # top residues of trans to calculate axis and points for superposition, translation, etc.
+  bottom_trans = [] # bottom residues of trans to calculate axis and points for superposition, translation, etc.
   if len(all_residues_to_wrap) > 0 and len(top_residues_to_wrap) > 0 and len(bottom_residues_to_wrap) > 0:
     trans = all_residues_to_wrap
     for i,r in enumerate(trans):
@@ -674,20 +671,23 @@ for pdb in pdbs:
   for i in bottom_trans:
     bottomcoords.append(p_trans.residue(i).atom(2).xyz())
 
+  ######################################
+  ## BETA BARREL WRAP?
 
   if barrel_wrap and len(wrap) == 0:
     # Create parametric cylinders (Naveed H. et al. JACS, 2012)
     # Sample range of parameters for optimal wrap height and radii to wrap target
     # 27-32 angstroms lipid bilayer height
     barrel_params = []
-    for nss in range(4,1000):  # sample strands
-      for shear in range(nss,(nss*2)+1): # sample shears
+    for nss in range(4,1000):  # sample a bunch of strands
+      for shear in range(nss,(nss*2)+1): # sample a bunch of respective shears
         if shear%2 == 0:
           # cylinder radius based on barrel parameters
-          r = math.sqrt((shear*intra_strand_dist)**2+(nss*inter_strand_dist)**2)/(2*nss*math.sin(math.pi/nss))   # cylinder radius
+          r = math.sqrt((shear*intra_strand_dist)**2+(nss*inter_strand_dist)**2)/(2*nss*math.sin(math.pi/nss))
 
+          # Sample radii optimal for packing with the target (distances to fit side chain interactions well between target and wrap) 
           if r > radius+beta_radius_buffer_min and r < radius+beta_radius_buffer_max:
-            for ss_nres in range(6,30):   # sample strand lengths
+            for ss_nres in range(6,30):   # sample a bunch of strand lengths
               # coil angle
               theta=asin(shear*intra_strand_dist/(2*math.pi*r))
               def disNextRes(x):
@@ -719,10 +719,11 @@ for pdb in pdbs:
                 heighta.append(z)
               h = heighta[-1]-heighta[0]
               # save cylinder wrap params
-              if h < tmheight+beta_tmheight_buffer and h > tmheight-beta_tmheight_buffer:  
+              if h < tmheight+beta_tmheight_buffer_max and h > tmheight+beta_tmheight_buffer_min: 
                 barrel_params.append( [ nss, shear, ss_nres, h, r ] )              
     # generate cylinders
     for barrel_param in barrel_params:
+      print(barrel_param)
       nss = barrel_param[0]
       shear = barrel_param[1]
       ss_nres = barrel_param[2]
@@ -755,11 +756,12 @@ for pdb in pdbs:
           z=r*dt/tan(theta)
           if z<0:continue
           n0 += 1
-          if n0>ss_nres: break # +4: break #jump out of the loop
+          if n0>ss_nres: break 
           sign = 1 if j%2 == 0 else -1
           coor_strand.append([x,y,z,sign])
         coor.append(coor_strand)
       chain_ids = 'ABCDEFGHIJKLMNOPQSTUVWXYZ'
+      chaini = 0
       foA = open(outpdbA,'w')
       resi = 1
       atomi = 2
@@ -768,51 +770,38 @@ for pdb in pdbs:
         if i%2 == 0: coor_strand.reverse()
         for j in range(len(coor_strand)):
           (x,y,z,sign) = coor_strand[j]
-          foA.write("ATOM  %5d  CA  VAL %1s%4d    %8.3f%8.3f%8.3f  1.00  0.00           %1d\n" % (atomi,'A',resi,x,y,z,sign))
+          foA.write("ATOM  %5d  CA  VAL %1s%4d    %8.3f%8.3f%8.3f  1.00  0.00           %1d\n" % (atomi,chain_ids[chaini],resi,x,y,z,sign))
           resi += 1
           atomi += 4
+        chaini += 1
       foA.close()
-
-      outprefix = f'{input_pdb_name}_WRAP_barrel_n{nss}_S{shear}_nres{ss_nres}_looplen{looplen}_tradius{radius:.0f}_cradius{barrel_r:.0f}_cheight{barrel_h:.0f}'
+      partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_barrel'
+      outprefix = f'{input_pdb_name}_WRAP_barrel_n{nss}_S{shear}_nres{ss_nres}_looplen{looplen}_termlen{termlen}_tradius{radius:.0f}_cradius{barrel_r:.0f}_cheight{barrel_h:.0f}'
 
       # Create backbones from CA only cylinders using BBQ
       # Gront, D. et. al. (2007), Backbone building from quadrilaterals: A fast and accurate 
       # algorithm for protein backbone reconstruction from alpha carbon coordinates. 
       # J. Comput. Chem., 28: 1593-1597. https://doi.org/10.1002/jcc.20624
-      cylinder_p = Pose() 
       os.system(f"java apps.BBQ -ip="+outpdbA)
       # cylinder pose
-      cylinder_p = pose_from_file(outpdbA.split('.pdb')[0]+'-bb.pdb')
+      cylinder_p_multichain = pose_from_file(outpdbA.split('.pdb')[0]+'-bb.pdb')
+      if debug: cylinder_p_multichain.dump_pdb('cylinder_p_multichain.pdb')
+      cylinder_p = Pose()
+      for i in range(1,(nss*ss_nres)+1):
+        core.conformation.remove_upper_terminus_type_from_conformation_residue(cylinder_p_multichain.conformation(), i)
+        core.conformation.remove_lower_terminus_type_from_conformation_residue(cylinder_p_multichain.conformation(), i)
+        cylinder_p.append_residue_by_bond(cylinder_p_multichain.residue(i))
       cylinder_p_len = len(cylinder_p.sequence())
-      cylinder_p.center()
-   
+      if debug: cylinder_p.dump_pdb('cylinder_p_trimmed.pdb')
+      
       # cleanup temp pdbs
       if not debug:
         for rmf in [ outpdbA, outpdbA+'.ss2', outpdbA.split('.pdb')[0]+'_rebuilt.pdb', outpdbA.split('.pdb')[0]+'-bb.pdb' ]:
           if os.path.exists(rmf): os.remove(rmf)
  
       # get cylinder top and bottom coords
-      ctop = []
-      cbottom = []
-      ctopcoords = vector_numeric_xyzVector_double_t()
-      cbottomcoords = vector_numeric_xyzVector_double_t()
-      for i in range(1,nss+1):
-        clen = i*ss_nres
-        if not i%2:
-          for add in range(1,blen+1):
-            ctop.append(clen-ss_nres+add)
-          for sub in range(1,blen+1):
-            cbottom.append(clen-sub+1)
-        else:
-          for add in range(1,blen+1):
-            cbottom.append(clen-ss_nres+add)
-          for sub in range(1,blen+1):
-            ctop.append(clen-sub+1)
-      for i in ctop:
-        ctopcoords.append(cylinder_p.residue(i).atom(2).xyz())
-      for i in cbottom:
-        cbottomcoords.append(cylinder_p.residue(i).atom(2).xyz())
-
+      ctop,cbottom,ctopcoords,cbottomcoords,ccoords = get_top_bottom_coords(cylinder_p,nss,ss_nres)   
+ 
       # align cylinder to target based on top, bottom, and center of mass coords
       p1 = Pose()
       p1.assign(cylinder_p)
@@ -836,53 +825,120 @@ for pdb in pdbs:
       p2.residue(len(p2.sequence())).atom(2).xyz(core.pose.get_center_of_mass(p2))
       p2len = len(p2.sequence())
       p1len = len(p1.sequence())
+
       ca_map = map_core_id_AtomID_core_id_AtomID()
-      ca_map[AtomID(p2.residue(p2len).atom_index("CA"), p2len)] = AtomID(p1.residue(p1len).atom_index("CA"), p1len)
-      ca_map[AtomID(p2.residue(p2len-1).atom_index("CA"), p2len-1)] = AtomID(p1.residue(p1len-1).atom_index("CA"), p1len-1)
-      ca_map[AtomID(p2.residue(p2len-2).atom_index("CA"), p2len-2)] = AtomID(p1.residue(p1len-2).atom_index("CA"), p1len-2)
-    
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p2,p1, ca_map, 0.00000001, False, False)
+      ca_map[AtomID(p1.residue(p1len).atom_index("CA"), p1len)] = AtomID(p2.residue(p2len).atom_index("CA"), p2len)
+      ca_map[AtomID(p1.residue(p1len-1).atom_index("CA"), p1len-1)] = AtomID(p2.residue(p2len-1).atom_index("CA"), p2len-1)
+      ca_map[AtomID(p1.residue(p1len-2).atom_index("CA"), p1len-2)] = AtomID(p2.residue(p2len-2).atom_index("CA"), p2len-2)
+      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
       if verbose: print(f'Cylinder to target axis superposition rmsd: {rmsd}')
+      if rmsd == 0.0:
+        print(f'Skipping due to alignment error.')
+        continue
     
       p1_flipped = Pose()
       p1_flipped.assign(p1)
       p2_flipped = Pose()
       p2_flipped.assign(p2)
     
-      # if even stranded, make a flipped cylinder for N-term fusion to C-term of cylinder
       ca_map = map_core_id_AtomID_core_id_AtomID()
-      ca_map[AtomID(p2_flipped.residue(p2len).atom_index("CA"), p2len)] = AtomID(p1_flipped.residue(p1len).atom_index("CA"), p1len)
-      ca_map[AtomID(p2_flipped.residue(p2len-1).atom_index("CA"), p2len-1)] = AtomID(p1_flipped.residue(p1len-2).atom_index("CA"), p1len-2)
-      ca_map[AtomID(p2_flipped.residue(p2len-2).atom_index("CA"), p2len-2)] = AtomID(p1_flipped.residue(p1len-1).atom_index("CA"), p1len-1)
-    
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p2_flipped,p1_flipped, ca_map, 0.00000001, False, False)
+      ca_map[AtomID(p1_flipped.residue(p1len).atom_index("CA"), p1len)] = AtomID(p2_flipped.residue(p2len).atom_index("CA"), p2len)
+      ca_map[AtomID(p1_flipped.residue(p1len-1).atom_index("CA"), p1len-1)] = AtomID(p2_flipped.residue(p2len-2).atom_index("CA"), p2len-2)
+      ca_map[AtomID(p1_flipped.residue(p1len-2).atom_index("CA"), p1len-2)] = AtomID(p2_flipped.residue(p2len-1).atom_index("CA"), p2len-1)
+      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1_flipped,p2_flipped, ca_map, 0.00000001, False, False)
       if verbose: print(f'Cylinder to target flipped axis superposition rmsd: {rmsd}')
+      if rmsd == 0.0:
+        print(f'Skipping due to alignment error.')
+        continue
+
       for i in range(0,3):
         p2.delete_residue_slow(len(p2.sequence()))
         p1.delete_residue_slow(len(p1.sequence()))
         p2_flipped.delete_residue_slow(len(p2_flipped.sequence()))
         p1_flipped.delete_residue_slow(len(p1_flipped.sequence()))
-    
+
       cylinder_p.assign(p1)
       cylinder_p_flipped = Pose()
       cylinder_p_flipped.assign(p1_flipped)
     
-      # append transmembrane part of target as a new chain
-      core.pose.append_pose_to_pose(cylinder_p, p2)
-      core.pose.append_pose_to_pose(cylinder_p_flipped, p2_flipped)
-      # at this point the target transmembrane portion should be placed in the cylinder
-      if debug:
-        cylinder_p.dump_pdb('cylinder_p.pdb')
-        cylinder_p_flipped.dump_pdb('cylinder_p_flipped.pdb')
-    
+      # append target as a new chain
+      core.pose.append_pose_to_pose(cylinder_p, input_p)
+      core.pose.append_pose_to_pose(cylinder_p_flipped, input_p)
+      
+      # At this point the target should be placed in the cylinder and flipped cylinder
+      #
+      # N- fusion   =>  wrap-C N-target
+      # C- fusion   =>  target-C N-wrap
+      #
+
+      # Need to determine what wrap orientaion(s) have the N and C termini on the same side
+      
+      move_angle = 5 # increments to check for the closest N to C termini distances
+
+      # For C- Fusion
       # rotate cylinder until transmembrane C-term is close to cylinder N-term
-      move_angle = 5
-      spinmover = protocols.rigid.RigidBodyDeterministicSpinMover(cylinder_p.num_jump(),center_of_mass(ctopcoords)-center_of_mass(cbottomcoords),core.pose.get_center_of_mass(p1),move_angle)
+      mindist_tC_to_wN_p = Pose()
+      
+      # The cylinder has to be the last chain for the spin mover to rotate it
+      cylinder_p_ = Pose()
+      cylinder_p_.assign(input_p)
+      cylinder_p_ = append_chain_to_pose(cylinder_p_, cylinder_p.split_by_chain(1))
+
+      ctop,cbottom,ctopcoords,cbottomcoords,ccoords = get_top_bottom_coords(cylinder_p_,nss,ss_nres,input_p_len)   
+      spinmover = protocols.rigid.RigidBodyDeterministicSpinMover(cylinder_p_.num_jump(),center_of_mass(ctopcoords)-center_of_mass(cbottomcoords),core.pose.get_center_of_mass(cylinder_p_.split_by_chain(2)),move_angle)
       mindist = 9999999.
       min_i = 0
       check_p = Pose()
-      check_p.assign(cylinder_p)
-    
+      check_p.assign(cylinder_p_)
+      for i in range(1,int(360/move_angle)+1):
+        spinmover.apply(check_p)
+        dist = (check_p.residue(input_p_len).atom(2).xyz() - check_p.residue(input_p_len+1).atom(2).xyz()).norm()
+        if dist < mindist:
+          mindist = dist
+          min_i = i
+      for i in range(1,min_i+1):
+        spinmover.apply(cylinder_p_)
+      mindist_tC_to_wN = mindist
+      
+      # make sure the rotated cylinder is back to being the first chain
+      cylinder_p = append_chain_to_pose(cylinder_p_.split_by_chain(2), input_p)
+
+      # get the same transmembrane C-term distance to the cylinder N-term to the flipped complex
+
+      # make the flipped cylinder the last chain for the spin mover
+      cylinder_p_flipped_ = Pose()
+      cylinder_p_flipped_.assign(input_p)
+      cylinder_p_flipped_ = append_chain_to_pose(cylinder_p_flipped_, cylinder_p_flipped.split_by_chain(1))
+
+      ctop,cbottom,ctopcoords,cbottomcoords,ccoords = get_top_bottom_coords(cylinder_p_flipped_,nss,ss_nres,input_p_len)
+      spinmoverf = protocols.rigid.RigidBodyDeterministicSpinMover(cylinder_p_flipped_.num_jump(),center_of_mass(cbottomcoords)-center_of_mass(ctopcoords),core.pose.get_center_of_mass(cylinder_p_flipped_.split_by_chain(2)),move_angle)
+      mindist = 9999999.
+      min_i = 0
+      check_p = Pose()
+      check_p.assign(cylinder_p_flipped_)
+      for i in range(1,int(360/move_angle)+1):
+        spinmoverf.apply(check_p)
+        dist = (check_p.residue(input_p_len).atom(2).xyz() - check_p.residue(input_p_len+1).atom(2).xyz()).norm()
+        if dist < mindist:
+          mindist = dist
+          min_i = i
+      for i in range(1,min_i+1):
+        spinmoverf.apply(cylinder_p_flipped_)
+      if mindist_tC_to_wN < mindist:
+        mindist_tC_to_wN_p.assign(cylinder_p)
+      else:
+        # make sure the rotated flipped cylinder is back to being the first chain
+        cylinder_p_flipped = append_chain_to_pose(cylinder_p_flipped_.split_by_chain(2), input_p)
+        mindist_tC_to_wN_p.assign(cylinder_p_flipped)
+
+      # For N- Fusion
+      # rotate cylinder until transmembrane N-term is close to cylinder C-term
+      mindist_tN_to_wC_p = Pose()
+
+      mindist = 9999999.
+      min_i = 0
+      check_p = Pose()
+      check_p.assign(cylinder_p_)
       for i in range(1,int(360/move_angle)+1):
         spinmover.apply(check_p)
         dist = (check_p.residue(1).atom(2).xyz() - check_p.residue(len(check_p.sequence())).atom(2).xyz()).norm()
@@ -890,151 +946,96 @@ for pdb in pdbs:
           mindist = dist
           min_i = i
       for i in range(1,min_i+1):
-        spinmover.apply(cylinder_p)
-    
-      # rotate flipped cylinder until transmembrane N-term is close to cylinder C-term
-      spinmover = protocols.rigid.RigidBodyDeterministicSpinMover(cylinder_p_flipped.num_jump(),center_of_mass(cbottomcoords)-center_of_mass(ctopcoords),core.pose.get_center_of_mass(p1_flipped),move_angle)
+        spinmover.apply(cylinder_p_)
+      mindist_tN_to_wC = mindist
+
+      # make sure the rotated cylinder is back to being the first chain
+      cylinder_p = append_chain_to_pose(cylinder_p_.split_by_chain(2), input_p)
+
+      # get the same transmembrane N-term distance to the cylinder C-term to the flipped complex
+
       mindist = 9999999.
       min_i = 0
       check_p = Pose()
-      check_p.assign(cylinder_p_flipped)
+      check_p.assign(cylinder_p_flipped_)
       for i in range(1,int(360/move_angle)+1):
-        spinmover.apply(check_p)
-        dist = (check_p.residue(cylinder_p_len).atom(2).xyz() - check_p.residue(cylinder_p_len+1).atom(2).xyz()).norm()
+        spinmoverf.apply(check_p)
+        dist = (check_p.residue(1).atom(2).xyz() - check_p.residue(len(check_p.sequence())).atom(2).xyz()).norm()
         if dist < mindist:
           mindist = dist
           min_i = i
       for i in range(1,min_i+1):
-        spinmover.apply(cylinder_p_flipped)
-    
-      ## place full target onto pose
-      p_copy = Pose()
-      p_copy.assign(input_p)
-      ca_map = map_core_id_AtomID_core_id_AtomID()
-      ti = 0
-      for r1 in range(cylinder_p_len+1,len(cylinder_p.sequence())+1):
-        ca_map[AtomID(p_copy.residue(trans[ti]).atom_index("CA"), trans[ti])] = AtomID(cylinder_p.residue(r1).atom_index("CA"), r1)
-        ti += 1
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p_copy, cylinder_p, ca_map)
-      if verbose: print(f'target placement rmsd: {rmsd}')
-      if rmsd > 1: continue    
+        spinmoverf.apply(cylinder_p_flipped_)
+      if mindist_tN_to_wC < mindist:
+        mindist_tN_to_wC_p.assign(cylinder_p)
+      else:
+        # make sure the rotated flipped cylinder is back to being the first chain
+        cylinder_p_flipped = append_chain_to_pose(cylinder_p_flipped_.split_by_chain(2), input_p)
+        mindist_tN_to_wC_p.assign(cylinder_p_flipped)
 
-      p_copy_flipped = Pose()
-      p_copy_flipped.assign(input_p)
-      ca_map = map_core_id_AtomID_core_id_AtomID()
-      ti = 0
-      for r1 in range(cylinder_p_len+1,len(cylinder_p_flipped.sequence())+1):
-        ca_map[AtomID(p_copy_flipped.residue(trans[ti]).atom_index("CA"), trans[ti])] = AtomID(cylinder_p_flipped.residue(r1).atom_index("CA"), r1)
-        ti += 1
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p_copy_flipped, cylinder_p_flipped, ca_map)
-      if verbose: print(f'target flipped placement rmsd: {rmsd}')
-      if rmsd > 1: continue
+      p_tC_to_wN = Pose()
+      p_tC_to_wN.assign(mindist_tC_to_wN_p)
+      p_tC_to_wN, skip = closeloops(nss, ss_nres, p_tC_to_wN.split_by_chain(1))
+      if skip: continue
+      # add full target back
+      p_tC_to_wN = append_chain_to_pose(p_tC_to_wN, input_p)
  
-      # Set up loops to close (if the start and stop positions are too far to close, skip it)
-      p = Pose()
-      p, loops, skip = add_loops_to_strands(cylinder_p,nss,ss_nres,looplen)
+      p_tN_to_wC = Pose()
+      p_tN_to_wC.assign(mindist_tN_to_wC_p)
+      p_tN_to_wC, skip = closeloops(nss, ss_nres, p_tN_to_wC.split_by_chain(1))
       if skip: continue
-      # add target back
-      p = append_chain_to_pose(p,p_copy)
-      p_flipped = Pose()
-      p_flipped, loops_flipped, skip = add_loops_to_strands(cylinder_p_flipped,nss,ss_nres,looplen)
-      if skip: continue
-      # add target back
-      p_flipped = append_chain_to_pose(p_flipped,p_copy_flipped)
-    
-      # Close loops 
-      if debug: p.dump_pdb('pre_close.pdb')
-      print(f'Closing length {looplen} loops... if this hangs for more than a minute ctrl-z and kill the process w/ (kill -9 {os.getpid()}) and increase looplen. The gap is too large to close.')
-      lm = protocols.loop_modeler.LoopModeler()
-      lm.set_loops(loops)
-      lm.enable_build_stage()
-      lm.disable_centroid_stage()
-      lm.disable_fullatom_stage()
-      lm.apply(p)
-    
-      lm.set_loops(loops_flipped)
-      lm.enable_build_stage()
-      lm.disable_centroid_stage()
-      lm.disable_fullatom_stage()
-      lm.apply(p_flipped)
-    
-      p_orig = Pose()
-      p_orig.assign(p)
-    
-      p_orig_flipped = Pose()
-      p_orig_flipped.assign(p_flipped)
-    
+      # add full target back
+      p_tN_to_wC = append_chain_to_pose(p_tN_to_wC, input_p)
+
+      p_tC_to_wN_orig = Pose()
+      p_tC_to_wN_orig.assign(p_tC_to_wN)
+      p_tN_to_wC_orig = Pose()
+      p_tN_to_wC_orig.assign(p_tN_to_wC)      
+
       # Extend termini 
       if verbose: print("Extending termini...")
       for i in range(termlen):
         res_type = core.chemical.ChemicalManager.get_instance().residue_type_set( 'fa_standard' ).get_representative_type_name1('A')
         residue = core.conformation.ResidueFactory.create_residue(res_type)
-        core.conformation.idealize_position(1, p.conformation())
-        p.prepend_polymer_residue_before_seqpos(residue, 1, True)
-        core.conformation.idealize_position(1, p.conformation())
-        core.conformation.idealize_position(len(core.pose.get_chain_residues(p,1)), p.conformation())
-        p.append_polymer_residue_after_seqpos(residue, len(core.pose.get_chain_residues(p,1)), True)
+
+        core.conformation.idealize_position(1, p_tC_to_wN.conformation())
+        p_tC_to_wN.prepend_polymer_residue_before_seqpos(residue, 1, True)
+        core.conformation.idealize_position(len(core.pose.get_chain_residues(p_tC_to_wN,1)), p_tC_to_wN.conformation())
+        p_tC_to_wN.append_polymer_residue_after_seqpos(residue, len(core.pose.get_chain_residues(p_tC_to_wN,1)), True)
     
-        core.conformation.idealize_position(1, p_flipped.conformation())
-        p_flipped.prepend_polymer_residue_before_seqpos(residue, 1, True)
-        core.conformation.idealize_position(1, p_flipped.conformation())
-        core.conformation.idealize_position(len(core.pose.get_chain_residues(p_flipped,1)), p_flipped.conformation()) 
-        p_flipped.append_polymer_residue_after_seqpos(residue, len(core.pose.get_chain_residues(p_flipped,1)), True)
-    
+        core.conformation.idealize_position(1, p_tN_to_wC.conformation())
+        p_tN_to_wC.prepend_polymer_residue_before_seqpos(residue, 1, True)
+        core.conformation.idealize_position(len(core.pose.get_chain_residues(p_tN_to_wC,1)), p_tN_to_wC.conformation()) 
+        p_tN_to_wC.append_polymer_residue_after_seqpos(residue, len(core.pose.get_chain_residues(p_tN_to_wC,1)), True)
+
       # superimpose extended termini barrel
       ca_map = map_core_id_AtomID_core_id_AtomID()
-      for r in range(1,len(core.pose.get_chain_residues(p_orig,1))+1):
-        ca_map[AtomID(p_orig.residue(r).atom_index("CA"), r)] = AtomID(p.residue(r+termlen).atom_index("CA"), r+termlen)
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p_orig, p, ca_map)
-      if verbose: print(f'extended termini barrel placement rmsd: {rmsd}')
-      if rmsd > 1: continue    
+      for r in range(1,len(core.pose.get_chain_residues(p_tC_to_wN_orig,1))+1):
+        ca_map[AtomID(p_tC_to_wN.residue(r+termlen).atom_index("CA"), r+termlen)] = AtomID(p_tC_to_wN_orig.residue(r).atom_index("CA"), r)
+      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p_tC_to_wN, p_tC_to_wN_orig, ca_map)
+      if verbose: print(f'extended termini C-term barrel placement rmsd: {rmsd}')
+      if rmsd > 1: continue
 
       ca_map = map_core_id_AtomID_core_id_AtomID()
-      for r in range(1,len(core.pose.get_chain_residues(p_orig_flipped,1))+1):
-        ca_map[AtomID(p_orig_flipped.residue(r).atom_index("CA"), r)] = AtomID(p_flipped.residue(r+termlen).atom_index("CA"), r+termlen)
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p_orig_flipped, p_flipped, ca_map)
-      if verbose: print(f'extended termini barrel flipped placement rmsd: {rmsd}')
-      if rmsd > 1: continue    
-    
-      finalp = append_chain_to_pose( p_orig.split_by_chain(2), p, 1 )
-      finalp_flipped = append_chain_to_pose( p_orig_flipped.split_by_chain(2), p_flipped, 1 )
-    
-      # replace target with orig coords (since full atom was lost for loop closure and termini extension)
-      ca_map = map_core_id_AtomID_core_id_AtomID()
-      for r in range(1,len(core.pose.get_chain_residues(p_copy,1))+1):
-        ca_map[AtomID(finalp.residue(r).atom_index("CA"), r)] = AtomID(p_copy.residue(r).atom_index("CA"), r)
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(finalp, p_copy, ca_map)
-      if verbose: print(f'target placement rmsd: {rmsd}')
-      if rmsd > 1: continue    
-    
-      ca_map = map_core_id_AtomID_core_id_AtomID()
-      for r in range(1,len(core.pose.get_chain_residues(p_copy_flipped,1))+1):
-        ca_map[AtomID(finalp_flipped.residue(r).atom_index("CA"), r)] = AtomID(p_copy_flipped.residue(r).atom_index("CA"), r)
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(finalp_flipped, p_copy_flipped, ca_map)
-      if verbose: print(f'target flipped placement rmsd: {rmsd}')
-      if rmsd > 1: continue    
-    
-      finalp_complex = Pose()
-      finalp_complex.assign(finalp)
-      finalp_flipped_complex = Pose()
-      finalp_flipped_complex.assign(finalp_flipped)
-      finalp = append_chain_to_pose( Pose(p_copy), finalp, 2, False )
-      finalp_flipped = append_chain_to_pose( finalp_flipped.split_by_chain(2), Pose(p_copy_flipped), 1, False )
-      finalp_complex = append_chain_to_pose( finalp_complex.split_by_chain(2), Pose(p_copy), 1, True )
-    
-    
-      finalp_flipped_complex = append_chain_to_pose( finalp_flipped_complex.split_by_chain(2), Pose(p_copy_flipped), 1, True )
+      for r in range(1,len(core.pose.get_chain_residues(p_tN_to_wC_orig,1))+1):
+        ca_map[AtomID(p_tN_to_wC.residue(r+termlen).atom_index("CA"), r+termlen)] = AtomID(p_tN_to_wC_orig.residue(r).atom_index("CA"), r)
+      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p_tN_to_wC, p_tN_to_wC_orig, ca_map)
+      if verbose: print(f'extended termini N-term barrel placement rmsd: {rmsd}')
+      if rmsd > 1: continue
+
+      p_tC_to_wN = append_chain_to_pose(p_tC_to_wN.split_by_chain(1), input_p)
+      p_tN_to_wC = append_chain_to_pose(p_tN_to_wC.split_by_chain(1), input_p) 
     
       # generate rotation variants as final WRAPs
-      save_rotations( finalp_complex, input_p, nss, ss_nres, outprefix+'_C', termlen, looplen, rotation_samples, rotation_sample_angle )
-      save_rotations( finalp_flipped_complex, input_p, nss, ss_nres, outprefix+'_N', termlen, looplen, rotation_samples, rotation_sample_angle )
+      save_rotations( p_tC_to_wN, input_p, nss, ss_nres, outprefix+'_C', termlen, looplen, rotation_samples, rotation_sample_angle )
+      save_rotations( p_tN_to_wC, input_p, nss, ss_nres, outprefix+'_N', termlen, looplen, rotation_samples, rotation_sample_angle )
     
       if verbose: print(f'Created {outprefix} outputs')
 
-
-
-
   elif len(wrap) > 0:
+
+  ##################################################
+  ## PRE-MADE WRAP? Just place WRAP around target.
 
     # Wrap with pre-made input wrap
     # align based on top, bottom, and center of mass coords
@@ -1065,6 +1066,9 @@ for pdb in pdbs:
   
     rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
     if verbose: print(f'Wrap to target superposition rmsd: {rmsd}')
+    if rmsd == 0.0:
+      print(f'Skipping due to alignment error.')
+      continue
 
     # remove GLYs
     for i in range(0,3):
@@ -1127,6 +1131,8 @@ for pdb in pdbs:
       print(f'Best distance to Cterm {bestdC}')
       print(f'Best distance to Nterm {bestdN}')
 
+    partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_{wrap_name}'
+    
     # generate rotation variants as final WRAPs
     outprefix = f'{input_pdb_name}_WRAP_{wrap_name}_nres{nres}_wrap_N'
     save_rotations( besthNp, input_p, 0, 0, outprefix, 0, 0, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
@@ -1134,6 +1140,9 @@ for pdb in pdbs:
     save_rotations( besthCp, input_p, 0, 0, outprefix, 0, 0, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
   else:
+
+  ######################################
+  ## HELICAL WRAP? The default.
 
     # Create parametric helical wraps
     # Both forward and reverse wraps
@@ -1188,7 +1197,10 @@ for pdb in pdbs:
   
     rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
     if verbose: print(f'helix to target superposition rmsd: {rmsd}')
-  
+    if rmsd == 0.0:
+      print(f'Skipping due to alignment error.')
+      continue  
+
     # remove GLYs
     for i in range(0,3):
       p1.delete_residue_slow(len(p1.sequence()))
@@ -1242,7 +1254,7 @@ for pdb in pdbs:
     if verbose:
       print(f'Best distance to Cterm {bestdC}')
       print(f'Best distance to Nterm {bestdN}')
-  
+ 
     # add helices
     hNfor = Pose()
     hNfor.assign(besthNp)
@@ -1252,10 +1264,13 @@ for pdb in pdbs:
     hNrev.assign(besthNp)
     hCrev = Pose()
     hCrev.assign(besthCp)
-    wrapNf = Pose()
+
     wrapCf = Pose()
-    wrapNr = Pose()
     wrapCr = Pose()
+
+    wrapNf_helices = []
+    wrapNr_helices = []
+
     for i in range(1,nss+1):
       hNforrot = Pose()
       hNforrot.assign(hNfor)
@@ -1278,7 +1293,7 @@ for pdb in pdbs:
         flipmoverNr.apply(hNrevrot)
         flipmoverCr.apply(hCrevrot)
 
-      append_chain_to_pose(wrapNf,hNforrot,1,False)
+      wrapNf_helices.append(hNforrot)
       append_chain_to_pose(wrapCf,hCforrot,1,False)
       spinmover.apply(hNfor)
       spinmover.apply(hCfor)
@@ -1287,8 +1302,8 @@ for pdb in pdbs:
       flipmoverNf.apply(hNfor)
       flipmoverCf = protocols.rigid.RigidBodyDeterministicSpinMover(1,pax,core.pose.get_center_of_mass(hCfor),180)
       flipmoverCf.apply(hCfor)
-
-      append_chain_to_pose(wrapNr,hNrevrot,1,False)
+ 
+      wrapNr_helices.append(hNrevrot)
       append_chain_to_pose(wrapCr,hCrevrot,1,False)
       spinmoverrev.apply(hNrev)
       spinmoverrev.apply(hCrev)
@@ -1297,6 +1312,19 @@ for pdb in pdbs:
       flipmoverNr.apply(hNrev)
       flipmoverCr = protocols.rigid.RigidBodyDeterministicSpinMover(1,pax,core.pose.get_center_of_mass(hCrev),180)
       flipmoverCr.apply(hCrev)
+
+    # hN should be the last chain (closest H-cterm to target-nterm)
+    # so we need to reverse the order of helices to append into a single chain
+    wrapNf = Pose()
+    wrapNr = Pose()
+    wrapNf_helices.reverse()
+    wrapNr_helices.reverse()
+    for h in wrapNf_helices:
+      append_chain_to_pose(wrapNf,h,1,False)
+    for h in wrapNr_helices:
+      append_chain_to_pose(wrapNr,h,1,False)
+
+    partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_helix'
 
     outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_tradius{radius:.0f}_for_wrap_N'
     print(f"Trying to close loops for {outprefix}")
@@ -1334,34 +1362,28 @@ for pdb in pdbs:
       append_chain_to_pose(input_pCr, wrapCr,1,True)
       save_rotations( input_pCr, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
-# Create task file containing partial diffusion commands
-if len(final_wraps) > 0:
-  print(f'Creating partial diffusion task(s) file: {partial_diffusion_task_file}')
-  pdtf = open(partial_diffusion_task_file, 'w')
-  ## Generate partial diffusion tasks
-  wrapstr = ''
-  if len(wrap) > 0:
-    wrapstr = wrap_name
-  elif barrel_wrap:
-    wrapstr = 'barrel'
-  else:
-    wrapstr = 'helix'
-  for i in final_wraps:
-      ca_atoms = []
-      with open(i) as f:
-        for l in f:
-          if l.startswith('ATOM'):
-            chain, atype, name3, resnum, x, y, z = read_pdb_atom(l)
-            if atype == 'CA':
-              ca_atoms.append([chain, atype, name3, resnum, x, y, z])
-      contigstr = f'{chain1_len(ca_atoms)},0\\ {chain2_contigs(ca_atoms)}'
-      prefix = i.split('.pdb')[0]+'_partial_diffusion/'+i.split('.pdb')[0]
-      cmd = f'{rf_diffusion_container} {rf_diffusion} inference.output_prefix={prefix} '
-      cmd += f'inference.input_pdb={i} contigmap.contigs=[\\\'{contigstr}\\\'] inference.num_designs={partial_diffusions} denoiser.noise_scale_ca=0.5 denoiser.noise_scale_frame=0.5 diffuser.partial_T={partial_diffusion_partialT}'
-      
-      pdtf.write(cmd+'\n')
-  pdtf.close()  
-  
+  # Create task file containing partial diffusion commands
+  if len(final_wraps) > 0:
+    pdtfname = f'{partial_diffusion_task_file_prefix}_{partial_diffusion_task_file_suffix}.txt'
+    print(f'Creating partial diffusion task(s) file: {pdtfname}')
+    pdtf = open(pdtfname, 'w')
+    ## Generate partial diffusion tasks
+    for i in final_wraps:
+        ca_atoms = []
+        with open(i) as f:
+          for l in f:
+            if l.startswith('ATOM'):
+              chain, atype, name3, resnum, x, y, z = read_pdb_atom(l)
+              if atype == 'CA':
+                ca_atoms.append([chain, atype, name3, resnum, x, y, z])
+        contigstr = f'{chain1_len(ca_atoms)},0\\ {chain2_contigs(ca_atoms)}'
+        prefix = i.split('.pdb')[0]+'_partial_diffusion/'+i.split('.pdb')[0]
+        cmd = f'{rf_diffusion_container} {rf_diffusion} inference.output_prefix={prefix} '
+        cmd += f'inference.input_pdb={i} contigmap.contigs=[\\\'{contigstr}\\\'] inference.num_designs={rf_partial_diffusions} denoiser.noise_scale_ca=0.5 denoiser.noise_scale_frame=0.5 diffuser.partial_T={rf_partial_diffusion_partialT}'
+        
+        pdtf.write(cmd+'\n')
+    pdtf.close()  
+    final_wraps = [] 
   
   
   
