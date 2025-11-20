@@ -236,7 +236,7 @@ else:
 def number_of_helices(radius):
   if manual_n > 0:
     return manual_n
-  return int(np.pi*2*(radius+rbuffer)/6.875) 
+  return int(round(np.pi*2*(radius+rbuffer)/6.875))
 
 # PARAM radius (if manual_n and no manual_radius)
 def radius_from_n(n):
@@ -249,7 +249,7 @@ def radius_from_n(n):
 def helix_length(tmheight):
   if manual_nres > 0:
     return manual_nres
-  return int(((tmheight+hbuffer)/5.4)*3.6)
+  return int(round(((tmheight+hbuffer)/5.4)*3.6))
 
 def generate_helix(n):
   aa = ''
