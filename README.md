@@ -14,7 +14,7 @@ You can clone this repo into a preferred destination directory by going to that 
 `git clone https://github.com/davidekim/sushimaki.git`
 
 ### For a complete pipeline to generate WRAPs
-Install ppi_iterative_opt submodule for RF partial diffusion, ProteinMPNN, and Alphafold2 protein-protein interaction design optimization.
+Install the ppi_iterative_opt submodule for RF partial diffusion, ProteinMPNN + Rosetta FastRelax, and Alphafold2 protein-protein interaction design optimization.
 
 ~~~
 cd sushimaki
@@ -22,7 +22,7 @@ git submodule init
 git submodule update
 ~~~
 
-Complete ppi_iterative_opt installation by following instructions at https://github.com/davidekim/ppi_iterative_opt and the websites of the dependencies.
+Complete the ppi_iterative_opt installation by following instructions at https://github.com/davidekim/ppi_iterative_opt and the websites of the dependencies.
 
 
 ### Dependencies
