@@ -15,7 +15,7 @@ debug = 0
 rf_diffusion_container = "/software/containers/SE3nv.sif"
 rf_diffusion = "/projects/ml/rf_diffusion/run_inference.py"
 rf_partial_diffusions = 10
-rf_partial_diffusion_partialT = 20
+rf_partial_diffusion_partialT = 30
 
 # Dependencies
 #
@@ -62,7 +62,7 @@ beta_radius_buffer_max = 10
 beta_radius_buffer_min = 8
 
 ## helix wrap parameters
-rbuffer = 5 # to add to transmembrane radius calculation to determine number of helices
+rbuffer = 6 # to add to transmembrane radius calculation to determine number of helices
 hbuffer = 5 # to add to tmheight for helix length
 
 ## General params
@@ -232,17 +232,17 @@ else:
 
 
 # PARAM n (number of helices function of TM radius)
-# 110/16 circumference divided by 16 = 6.875 based on 8efo example w/ 16 helices <- LJ's original count
+# 110/16 circumference divided by 16 = 6.875 (~7) based on 8efo example w/ 16 helices <- LJ's original count
 def number_of_helices(radius):
   if manual_n > 0:
     return manual_n
-  return int(round(np.pi*2*(radius+rbuffer)/6.875))
+  return int(round(np.pi*2*(radius+rbuffer)/7))
 
 # PARAM radius (if manual_n and no manual_radius)
 def radius_from_n(n):
   if manual_radius > 0:
     return manual_radius
-  return (n*6.875/(np.pi*2))-rbuffer
+  return (n*7/(np.pi*2))-rbuffer
 
 # PARAM nres (length of helix as a function of TM height)
 # 3.6 res/turn 5.4 angstroms rise/turn;
@@ -776,7 +776,7 @@ for pdb in pdbs:
         chaini += 1
       foA.close()
       partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_barrel'
-      outprefix = f'{input_pdb_name}_WRAP_barrel_n{nss}_S{shear}_nres{ss_nres}_looplen{looplen}_termlen{termlen}_tradius{radius:.0f}_cradius{barrel_r:.0f}_cheight{barrel_h:.0f}'
+      outprefix = f'{input_pdb_name}_WRAP_barrel_n{nss}_S{shear}_nres{ss_nres}_looplen{looplen}_termlen{termlen}_r{barrel_r:.2f}_cheight{barrel_h:.0f}'
 
       # Create backbones from CA only cylinders using BBQ
       # Gront, D. et. al. (2007), Backbone building from quadrilaterals: A fast and accurate 
@@ -1326,7 +1326,7 @@ for pdb in pdbs:
 
     partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_helix'
 
-    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_tradius{radius:.0f}_for_wrap_N'
+    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_for_wrap_N'
     print(f"Trying to close loops for {outprefix}")
     wrapNf, skip = closeloops(nss, ss_nres, wrapNf)
     if not skip:
@@ -1335,7 +1335,7 @@ for pdb in pdbs:
       append_chain_to_pose(input_pNf, wrapNf,1,True)
       save_rotations( input_pNf, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
-    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_tradius{radius:.0f}_for_wrap_C' 
+    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_for_wrap_C' 
     print(f"Trying to close loops for {outprefix}")
     wrapCf, skip = closeloops(nss, ss_nres, wrapCf)
     if not skip:
@@ -1344,7 +1344,7 @@ for pdb in pdbs:
       append_chain_to_pose(input_pCf, wrapCf,1,True)
       save_rotations( input_pCf, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
-    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_tradius{radius:.0f}_rev_wrap_N'
+    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_rev_wrap_N'
     print(f"Trying to close loops for {outprefix}")
     wrapNr, skip = closeloops(nss, ss_nres, wrapNr)
     if not skip:
@@ -1353,7 +1353,7 @@ for pdb in pdbs:
       append_chain_to_pose(input_pNr, wrapNr,1,True)
       save_rotations( input_pNr, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
-    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_tradius{radius:.0f}_rev_wrap_C'
+    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_rev_wrap_C'
     print(f"Trying to close loops for {outprefix}")
     wrapCr, skip = closeloops(nss, ss_nres, wrapCr)
     if not skip:
