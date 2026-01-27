@@ -1338,7 +1338,7 @@ for pdb in pdbs:
     partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_{flipped_str}helix'
 
     outprefix = f'{input_pdb_name}_WRAP_{flipped_str}helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_for_wrap_N'
-    print(f"Trying to close loops for {outprefix}")
+    if verbose: print(f"Trying to close loops for {outprefix}")
     wrapNf, skip = closeloops(nss, ss_nres, wrapNf)
     if not skip:
       input_pNf = Pose()
@@ -1347,7 +1347,7 @@ for pdb in pdbs:
       save_rotations( input_pNf, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
     outprefix = f'{input_pdb_name}_WRAP_{flipped_str}helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_for_wrap_C' 
-    print(f"Trying to close loops for {outprefix}")
+    if verbose: print(f"Trying to close loops for {outprefix}")
     wrapCf, skip = closeloops(nss, ss_nres, wrapCf)
     if not skip:
       input_pCf = Pose()
@@ -1356,7 +1356,7 @@ for pdb in pdbs:
       save_rotations( input_pCf, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
     outprefix = f'{input_pdb_name}_WRAP_{flipped_str}helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_rev_wrap_N'
-    print(f"Trying to close loops for {outprefix}")
+    if verbose: print(f"Trying to close loops for {outprefix}")
     wrapNr, skip = closeloops(nss, ss_nres, wrapNr)
     if not skip:
       input_pNr = Pose()
@@ -1365,7 +1365,7 @@ for pdb in pdbs:
       save_rotations( input_pNr, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
     outprefix = f'{input_pdb_name}_WRAP_{flipped_str}helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_rev_wrap_C'
-    print(f"Trying to close loops for {outprefix}")
+    if verbose: print(f"Trying to close loops for {outprefix}")
     wrapCr, skip = closeloops(nss, ss_nres, wrapCr)
     if not skip:
       input_pCr = Pose()
