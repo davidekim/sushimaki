@@ -8,6 +8,8 @@ import argparse
 import biolib
 
 debug = 0
+import warnings
+warnings.filterwarnings('ignore')
 
 # Dependencies
 #
@@ -326,13 +328,14 @@ def get_transmembrane_residues(pose, input_pdb_name):
                 inner_trans.append(i+1-sub)
         break
       lcnt += 1
-  print(f'get_transmembrane_residues from: {tmpred}..')
-  print('+'.join(map(str,trans)))
-  print('outer trans: '+'+'.join(map(str,outer_trans)))
-  print('inner trans: '+'+'.join(map(str,inner_trans)))
-  print('outer: '+'+'.join(map(str,outer)))
-  print('inner: '+'+'.join(map(str,inner)))
-  print()
+  if verbose:
+    print(f'get_transmembrane_residues from: {tmpred}..')
+    print('+'.join(map(str,trans)))
+    print('outer trans: '+'+'.join(map(str,outer_trans)))
+    print('inner trans: '+'+'.join(map(str,inner_trans)))
+    print('outer: '+'+'.join(map(str,outer)))
+    print('inner: '+'+'.join(map(str,inner)))
+    print()
   return trans,outer_trans,inner_trans,outer,inner
 
 def center_of_mass(xyzVec):
@@ -427,7 +430,7 @@ def closeloops(nss, ss_nres, pose):
   pose, loops, skip = add_loops(pose,Nposs,Cposs)
   if not skip:
     if debug: pose.dump_pdb('pre_close.pdb')
-    print(f'Attempting to close length {looplen} loops...')
+    if verbose: print(f'Attempting to close length {looplen} loops...')
     # Note LoopModeler may not be successful at closing loops for various reasons
     # This should be replaced with a more robust quick and rough loop modeler in the future.
     # The loops do not have to be accurate or physically realistic since RF partial diffusion
@@ -438,7 +441,7 @@ def closeloops(nss, ss_nres, pose):
     lm.disable_fullatom_stage()
     lm.apply(pose)
     if not is_closed(pose, loops):
-      print(f'Loops could not close so skipping..')
+      if verbose: print(f'Loops could not close so skipping..')
       skip = True
   return pose, skip
 
@@ -698,9 +701,9 @@ for pdb in pdbs:
               # coil angle
               theta=asin(shear*intra_strand_dist/(2*math.pi*r))
               def disNextRes(x):
-                return sqrt(r**2*(2-2*cos(x))+(r*x/tan(theta))**2)-intra_strand_dist
+                return sqrt(r**2*(2-2*cos(x[0]))+(r*x[0]/tan(theta))**2)-intra_strand_dist
               def disNextStrand(x):
-                return sqrt(r**2*(2-2*cos(x+2*math.pi/nss))+(r*x/tan(theta))**2)-inter_strand_dist
+                return sqrt(r**2*(2-2*cos(x[0]+2*math.pi/nss))+(r*x[0]/tan(theta))**2)-inter_strand_dist
               delta_t1 = fsolve(disNextRes,0)[0]
               delta_t2 = fsolve(disNextStrand,0)[0]
               def dis(x,y):
@@ -730,7 +733,6 @@ for pdb in pdbs:
                 barrel_params.append( [ nss, shear, ss_nres, h, r ] )              
     # generate cylinders
     for barrel_param in barrel_params:
-      print(barrel_param)
       nss = barrel_param[0]
       shear = barrel_param[1]
       ss_nres = barrel_param[2]
@@ -740,9 +742,9 @@ for pdb in pdbs:
       r=sqrt((nss*inter_strand_dist)**2+(shear*intra_strand_dist)**2)/(2*pi)
       theta=asin(shear*intra_strand_dist/(2*math.pi*r))
       def disNextRes(x):
-        return sqrt(r**2*(2-2*cos(x))+(r*x/tan(theta))**2)-intra_strand_dist
+        return sqrt(r**2*(2-2*cos(x[0]))+(r*x[0]/tan(theta))**2)-intra_strand_dist
       def disNextStrand(x):
-        return sqrt(r**2*(2-2*cos(x+2*math.pi/nss))+(r*x/tan(theta))**2)-inter_strand_dist
+        return sqrt(r**2*(2-2*cos(x[0]+2*math.pi/nss))+(r*x[0]/tan(theta))**2)-inter_strand_dist
       delta_t1 = fsolve(disNextRes,0)[0]
       delta_t2 = fsolve(disNextStrand,0)[0]
       def dis(x,y):
@@ -789,7 +791,7 @@ for pdb in pdbs:
       # Gront, D. et. al. (2007), Backbone building from quadrilaterals: A fast and accurate 
       # algorithm for protein backbone reconstruction from alpha carbon coordinates. 
       # J. Comput. Chem., 28: 1593-1597. https://doi.org/10.1002/jcc.20624
-      os.system(f"java apps.BBQ -ip="+outpdbA)
+      os.system(f"java apps.BBQ -ip={outpdbA} > /dev/null 2>&1")
       # cylinder pose
       cylinder_p_multichain = pose_from_file(outpdbA.split('.pdb')[0]+'-bb.pdb')
       if debug: cylinder_p_multichain.dump_pdb('cylinder_p_multichain.pdb')
@@ -840,7 +842,7 @@ for pdb in pdbs:
       rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
       if verbose: print(f'Cylinder to target axis superposition rmsd: {rmsd}')
       if rmsd == 0.0:
-        print(f'Skipping due to alignment error.')
+        if verbose: print(f'Skipping due to alignment error.')
         continue
     
       p1_flipped = Pose()
@@ -855,7 +857,7 @@ for pdb in pdbs:
       rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1_flipped,p2_flipped, ca_map, 0.00000001, False, False)
       if verbose: print(f'Cylinder to target flipped axis superposition rmsd: {rmsd}')
       if rmsd == 0.0:
-        print(f'Skipping due to alignment error.')
+        if verbose: print(f'Skipping due to alignment error.')
         continue
 
       for i in range(0,3):
@@ -1076,7 +1078,7 @@ for pdb in pdbs:
     rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
     if verbose: print(f'Wrap to target superposition rmsd: {rmsd}')
     if rmsd == 0.0:
-      print(f'Skipping due to alignment error.')
+      if verbose: print(f'Skipping due to alignment error.')
       continue
 
     # remove GLYs
@@ -1207,7 +1209,7 @@ for pdb in pdbs:
     rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
     if verbose: print(f'helix to target superposition rmsd: {rmsd}')
     if rmsd == 0.0:
-      print(f'Skipping due to alignment error.')
+      if verbose: print(f'Skipping due to alignment error.')
       continue  
 
     # remove GLYs
