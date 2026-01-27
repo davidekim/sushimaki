@@ -9,14 +9,6 @@ import biolib
 
 debug = 0
 
-# For partial diffusion commands output file
-# Point to your RFdiffusion installation
-# Refer to https://github.com/RosettaCommons/RFdiffusion
-rf_diffusion_container = "/software/containers/SE3nv.sif"
-rf_diffusion = "/projects/ml/rf_diffusion/run_inference.py"
-rf_partial_diffusions = 10
-rf_partial_diffusion_partialT = 30
-
 # Dependencies
 #
 # PyRosetta
@@ -100,9 +92,14 @@ parser.add_argument('--wrap', type=str, default='', help='Try to place this PDB 
 parser.add_argument('--wrap_top_resi', type=str, default='', help='Wrap top comma separated resi for superposition.')
 parser.add_argument('--wrap_bottom_resi', type=str, default='', help='Wrap bottom comma separated resi for superposition.')
 parser.add_argument('--wrap_barrel_params', type=str, default='', help='Assign wrap_top_resi and wrap_bottom_resi based on comma separated barrel params n,nres,looplen,terminilen.')
+parser.add_argument('--flip_wrap', default=False, action='store_true', help='Flip the wrap.')
 parser.add_argument('--barrel', default=False, action='store_true', help='Wrap with a beta barrel. n, nres, and radius will be automatically sampled. Helices are used by default.')
 parser.add_argument('--barrel_termini_len', type=int, default=3, help='N and C terminal extension length for barrel wraps.')
-parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output.')
+
+parser.add_argument('--rf_diffusion_container', type=str, default='/software/containers/SE3nv.sif', help='Path to optional Apptainer for running RFDiffusion.')
+parser.add_argument('--rf_diffusion', type=str, default='/projects/ml/rf_diffusion/run_inference.py', help='Path to RFDiffusion run_inference.py.')
+parser.add_argument('--rf_partial_diffusions', type=int, default=10, help='Number of partial RF diffusion trajectories.')
+parser.add_argument('--rf_diffusion_partialT', type=int, default=30, help='RF diffusion partialT value.')
 
 parser.add_argument(
         '--top_residues_to_wrap',
@@ -128,10 +125,16 @@ parser.add_argument(
         default=[]
         )
 
+parser.add_argument('--verbose', default=False, action='store_true', help='Verbose output.')
 parser.add_argument('pdbs', nargs=argparse.REMAINDER, help='Input PDBs.')
 
 args = vars(parser.parse_args())
 exit = False
+
+rf_diffusion_container = args['rf_diffusion_container']
+rf_diffusion = args['rf_diffusion']
+rf_partial_diffusions = args['rf_partial_diffusions']
+rf_partial_diffusion_partialT = args['rf_diffusion_partialT']
 
 partial_diffusion_task_file_prefix = args['partial_diffusion_task_file_prefix']
 barrel_wrap = args['barrel']
@@ -153,6 +156,10 @@ bottom_residues_to_wrap_ = args['bottom_residues_to_wrap']
 wrap = args['wrap']
 wrap_top_resi = args['wrap_top_resi']
 wrap_bottom_resi = args['wrap_bottom_resi']
+flip_wrap = args['flip_wrap']
+flipped_str = ""
+if flip_wrap:
+  flipped_str = 'flipped_'
 wraptopresi = wrap_top_resi.split(',')
 wrapbottomresi = wrap_bottom_resi.split(',')
 if len(wrap) > 0 and not os.path.exists(wrap):
@@ -775,8 +782,8 @@ for pdb in pdbs:
           atomi += 4
         chaini += 1
       foA.close()
-      partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_barrel'
-      outprefix = f'{input_pdb_name}_WRAP_barrel_n{nss}_S{shear}_nres{ss_nres}_looplen{looplen}_termlen{termlen}_r{barrel_r:.2f}_cheight{barrel_h:.0f}'
+      partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_{flipped_str}barrel'
+      outprefix = f'{input_pdb_name}_WRAP_{flipped_str}barrel_n{nss}_S{shear}_nres{ss_nres}_looplen{looplen}_termlen{termlen}_r{barrel_r:.2f}_cheight{barrel_h:.0f}'
 
       # Create backbones from CA only cylinders using BBQ
       # Gront, D. et. al. (2007), Backbone building from quadrilaterals: A fast and accurate 
@@ -924,7 +931,8 @@ for pdb in pdbs:
           min_i = i
       for i in range(1,min_i+1):
         spinmoverf.apply(cylinder_p_flipped_)
-      if mindist_tC_to_wN < mindist:
+
+      if (mindist_tC_to_wN < mindist and not flip_wrap) or (mindist_tC_to_wN > mindist and flip_wrap):
         mindist_tC_to_wN_p.assign(cylinder_p)
       else:
         # make sure the rotated flipped cylinder is back to being the first chain
@@ -966,7 +974,8 @@ for pdb in pdbs:
           min_i = i
       for i in range(1,min_i+1):
         spinmoverf.apply(cylinder_p_flipped_)
-      if mindist_tN_to_wC < mindist:
+
+      if (mindist_tN_to_wC < mindist and not flip_wrap) or (mindist_tN_to_wC > mindist and flip_wrap):
         mindist_tN_to_wC_p.assign(cylinder_p)
       else:
         # make sure the rotated flipped cylinder is back to being the first chain
@@ -1121,22 +1130,22 @@ for pdb in pdbs:
       dN = (input_p.residue(1).atom(2).xyz()-targetpflipped.residue(input_p_len+nres).atom(2).xyz()).norm()
       # C-target - N-wrap
       dC = (input_p.residue(input_p_len).atom(2).xyz()-targetpflipped.residue(input_p_len+1).atom(2).xyz()).norm()
-      if dN < bestdN:
+      if (dN < bestdN and not flip_wrap) or (dN > bestdN and flip_wrap):
         besthNp.assign(targetpflipped)
         bestdN = dN
-      if dC < bestdC:
+      if (dC < bestdC and not flip_wrap) or (dC > bestdC and flip_wrap):
         besthCp.assign(targetpflipped)
         bestdC = dC
     if verbose:
       print(f'Best distance to Cterm {bestdC}')
       print(f'Best distance to Nterm {bestdN}')
 
-    partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_{wrap_name}'
+    partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_{flipped_str}{wrap_name}'
     
     # generate rotation variants as final WRAPs
-    outprefix = f'{input_pdb_name}_WRAP_{wrap_name}_nres{nres}_wrap_N'
+    outprefix = f'{input_pdb_name}_WRAP_{flipped_str}{wrap_name}_nres{nres}_wrap_N'
     save_rotations( besthNp, input_p, 0, 0, outprefix, 0, 0, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
-    outprefix = f'{input_pdb_name}_WRAP_{wrap_name}_nres{nres}_wrap_C'
+    outprefix = f'{input_pdb_name}_WRAP_{flipped_str}{wrap_name}_nres{nres}_wrap_C'
     save_rotations( besthCp, input_p, 0, 0, outprefix, 0, 0, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
   else:
@@ -1245,10 +1254,10 @@ for pdb in pdbs:
       flipmover.apply(p1)
       dN = (input_p.residue(1).atom(2).xyz()-p1.residue(ss_nres).atom(2).xyz()).norm()
       dC = (input_p.residue(input_p_len).atom(2).xyz()-p1.residue(1).atom(2).xyz()).norm()
-      if dN < bestdN:
+      if (dN < bestdN and not flip_wrap) or (dN > bestdN and flip_wrap):
         besthNp.assign(p1) 
         bestdN = dN
-      if dC < bestdC:
+      if (dC < bestdC and not flip_wrap) or (dC > bestdC and flip_wrap): 
         besthCp.assign(p1)
         bestdC = dC
     if verbose:
@@ -1324,9 +1333,9 @@ for pdb in pdbs:
     for h in wrapNr_helices:
       append_chain_to_pose(wrapNr,h,1,False)
 
-    partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_helix'
+    partial_diffusion_task_file_suffix = f'{input_pdb_name}_WRAP_{flipped_str}helix'
 
-    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_for_wrap_N'
+    outprefix = f'{input_pdb_name}_WRAP_{flipped_str}helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_for_wrap_N'
     print(f"Trying to close loops for {outprefix}")
     wrapNf, skip = closeloops(nss, ss_nres, wrapNf)
     if not skip:
@@ -1335,7 +1344,7 @@ for pdb in pdbs:
       append_chain_to_pose(input_pNf, wrapNf,1,True)
       save_rotations( input_pNf, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
-    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_for_wrap_C' 
+    outprefix = f'{input_pdb_name}_WRAP_{flipped_str}helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_for_wrap_C' 
     print(f"Trying to close loops for {outprefix}")
     wrapCf, skip = closeloops(nss, ss_nres, wrapCf)
     if not skip:
@@ -1344,7 +1353,7 @@ for pdb in pdbs:
       append_chain_to_pose(input_pCf, wrapCf,1,True)
       save_rotations( input_pCf, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
-    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_rev_wrap_N'
+    outprefix = f'{input_pdb_name}_WRAP_{flipped_str}helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_rev_wrap_N'
     print(f"Trying to close loops for {outprefix}")
     wrapNr, skip = closeloops(nss, ss_nres, wrapNr)
     if not skip:
@@ -1353,7 +1362,7 @@ for pdb in pdbs:
       append_chain_to_pose(input_pNr, wrapNr,1,True)
       save_rotations( input_pNr, input_p, nss, ss_nres, outprefix, 0, looplen, rotation_samples, rotation_sample_angle, offsetspinmoverfor, offsetspinmoverrev, True)
 
-    outprefix = f'{input_pdb_name}_WRAP_helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_rev_wrap_C'
+    outprefix = f'{input_pdb_name}_WRAP_{flipped_str}helix_n{nss}_nres{ss_nres}_looplen{looplen}_r{radius+rbuffer:.2f}_rev_wrap_C'
     print(f"Trying to close loops for {outprefix}")
     wrapCr, skip = closeloops(nss, ss_nres, wrapCr)
     if not skip:
