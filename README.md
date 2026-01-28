@@ -19,7 +19,7 @@ Install the ppi_iterative_opt submodule for RF partial diffusion, ProteinMPNN + 
 ~~~
 cd sushimaki
 git submodule init
-git submodule update
+git submodule update --remote
 ~~~
 
 Complete the ppi_iterative_opt installation by following instructions at https://github.com/davidekim/ppi_iterative_opt and the websites of the dependencies.
