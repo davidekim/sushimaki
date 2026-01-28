@@ -9,6 +9,8 @@ This repo includes utility scripts to generate helical or beta barrel WRAPs para
 Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science.
 
 ## Installation
+You can install and run this package from the [google colab notebook](https://colab.research.google.com/github/davidekim/sushimaki/blob/main/sushimaki.ipynb)
+
 You can clone this repo into a preferred destination directory by going to that directory and then running:
 
 `git clone https://github.com/davidekim/sushimaki.git`
