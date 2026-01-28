@@ -636,6 +636,10 @@ for pdb in pdbs:
     # get transmembrane part of input based on tmhmm prediction
     trans,top,bottom,top_trans,bottom_trans = get_transmembrane_residues(input_p, input_pdb_name)
 
+  if len(trans) == 0 or len(top) == 0 or len(bottom) == 0:
+    print(f"Region to wrap could not be determined for {pdb}")
+    continue
+        
   # estimate radius based on top and bottom coords of transmembrane segments
   icoords = vector_numeric_xyzVector_double_t()
   for i in top:
