@@ -98,8 +98,8 @@ parser.add_argument('--flip_wrap', default=False, action='store_true', help='Fli
 parser.add_argument('--barrel', default=False, action='store_true', help='Wrap with a beta barrel. n, nres, and radius will be automatically sampled. Helices are used by default.')
 parser.add_argument('--barrel_termini_len', type=int, default=3, help='N and C terminal extension length for barrel wraps.')
 
-parser.add_argument('--rf_diffusion_container', type=str, default='/software/containers/SE3nv.sif', help='Path to optional Apptainer for running RFDiffusion.')
-parser.add_argument('--rf_diffusion', type=str, default='/projects/ml/rf_diffusion/run_inference.py', help='Path to RFDiffusion run_inference.py.')
+parser.add_argument('--rf_diffusion_container', type=str, default='python', help='Path to optional Apptainer for running RFDiffusion.')
+parser.add_argument('--rf_diffusion', type=str, default=f'{installdir}/ppi_iterative_opt/rf_diffusion/run_inference.py', help='Path to RFDiffusion run_inference.py.')
 parser.add_argument('--rf_partial_diffusions', type=int, default=10, help='Number of partial RF diffusion trajectories.')
 parser.add_argument('--rf_diffusion_partialT', type=int, default=30, help='RF diffusion partialT value.')
 
