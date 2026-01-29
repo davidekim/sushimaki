@@ -598,7 +598,8 @@ if len(wrap) > 0:
       cbottomcoords.append(p_w.residue(resi).atom(2).xyz())
   else:
     # did user provide barrel params for input wrap?
-    barrel_wrap_params = list(map(int,barrel_wrap_params_str.split(',')))
+    barrel_wrap_params = []
+    if len(barrel_wrap_params_str) > 0: barrel_wrap_params = list(map(int,barrel_wrap_params_str.split(',')))
     if len(barrel_wrap_params) > 0:
       if len(barrel_wrap_params) != 4:
         print("--wrap_barrel_params requires 4 comma separated values for strand count, strand length, connecting loop length, and termini length.")
