@@ -844,7 +844,10 @@ for pdb in pdbs:
       ca_map[AtomID(p1.residue(p1len).atom_index("CA"), p1len)] = AtomID(p2.residue(p2len).atom_index("CA"), p2len)
       ca_map[AtomID(p1.residue(p1len-1).atom_index("CA"), p1len-1)] = AtomID(p2.residue(p2len-1).atom_index("CA"), p2len-1)
       ca_map[AtomID(p1.residue(p1len-2).atom_index("CA"), p1len-2)] = AtomID(p2.residue(p2len-2).atom_index("CA"), p2len-2)
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
+      rmsd = 0.0
+      for rms_calc_offset in [ 0.00000001, 0.0000001, 0.000001, 0.00001, 0.0001, ]:
+        rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, rms_calc_offset, False, False)
+        if rmsd != 0.0: break
       if verbose: print(f'Cylinder to target axis superposition rmsd: {rmsd}')
       if rmsd == 0.0:
         if verbose: print(f'Skipping due to alignment error.')
@@ -859,7 +862,10 @@ for pdb in pdbs:
       ca_map[AtomID(p1_flipped.residue(p1len).atom_index("CA"), p1len)] = AtomID(p2_flipped.residue(p2len).atom_index("CA"), p2len)
       ca_map[AtomID(p1_flipped.residue(p1len-1).atom_index("CA"), p1len-1)] = AtomID(p2_flipped.residue(p2len-2).atom_index("CA"), p2len-2)
       ca_map[AtomID(p1_flipped.residue(p1len-2).atom_index("CA"), p1len-2)] = AtomID(p2_flipped.residue(p2len-1).atom_index("CA"), p2len-1)
-      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1_flipped,p2_flipped, ca_map, 0.00000001, False, False)
+      rmsd = 0.0
+      for rms_calc_offset in [ 0.00000001, 0.0000001, 0.000001, 0.00001, 0.0001, ]:
+        rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1_flipped,p2_flipped, ca_map, rms_calc_offset, False, False)
+        if rmsd != 0.0: break
       if verbose: print(f'Cylinder to target flipped axis superposition rmsd: {rmsd}')
       if rmsd == 0.0:
         if verbose: print(f'Skipping due to alignment error.')
@@ -1079,8 +1085,10 @@ for pdb in pdbs:
     ca_map[AtomID(p1.residue(p1len).atom_index("CA"), p1len)] = AtomID(p2.residue(p2len).atom_index("CA"), p2len)
     ca_map[AtomID(p1.residue(p1len-1).atom_index("CA"), p1len-1)] = AtomID(p2.residue(p2len-1).atom_index("CA"), p2len-1)
     ca_map[AtomID(p1.residue(p1len-2).atom_index("CA"), p1len-2)] = AtomID(p2.residue(p2len-2).atom_index("CA"), p2len-2)
-  
-    rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
+    rmsd = 0.0
+    for rms_calc_offset in [ 0.00000001, 0.0000001, 0.000001, 0.00001, 0.0001, ]: 
+      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, rms_calc_offset, False, False)
+      if rmsd != 0.0: break
     if verbose: print(f'Wrap to target superposition rmsd: {rmsd}')
     if rmsd == 0.0:
       if verbose: print(f'Skipping due to alignment error.')
@@ -1210,8 +1218,10 @@ for pdb in pdbs:
     ca_map[AtomID(p1.residue(p1len).atom_index("CA"), p1len)] = AtomID(p2.residue(p2len).atom_index("CA"), p2len)
     ca_map[AtomID(p1.residue(p1len-1).atom_index("CA"), p1len-1)] = AtomID(p2.residue(p2len-1).atom_index("CA"), p2len-1)
     ca_map[AtomID(p1.residue(p1len-2).atom_index("CA"), p1len-2)] = AtomID(p2.residue(p2len-2).atom_index("CA"), p2len-2)
-  
-    rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, 0.00000001, False, False)
+    rmsd = 0.0
+    for rms_calc_offset in [ 0.00000001, 0.0000001, 0.000001, 0.00001, 0.0001, ]:
+      rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, rms_calc_offset, False, False)
+      if rmsd != 0.0: break
     if verbose: print(f'helix to target superposition rmsd: {rmsd}')
     if rmsd == 0.0:
       if verbose: print(f'Skipping due to alignment error.')
