@@ -74,6 +74,10 @@ parser = argparse.ArgumentParser(
       epilog=textwrap.dedent('''\
 
          additional information:
+
+             This script generates parametrically generated WRAPs around an input target.
+             A task file will also be generated with commands to run RF partial diffusion structure refinement.
+
              By default:
                 TM is the transmembrane segment predicted by DeepTMHMM.
                 https://dtu.biolib.com/DeepTMHMM (pip3 install pybiolib)
@@ -235,7 +239,7 @@ from pyrosetta.rosetta.std import (
 from pyrosetta.rosetta.numeric import xyzVector_double_t
 
 if verbose or debug:
-  init( " -max_kic_build_attempts 100 -out:level 10000 " )
+  init( " -max_kic_build_attempts 100 " )
 else:
   init( " -max_kic_build_attempts 100 -mute all " )
 
@@ -1218,10 +1222,19 @@ for pdb in pdbs:
     ca_map[AtomID(p1.residue(p1len).atom_index("CA"), p1len)] = AtomID(p2.residue(p2len).atom_index("CA"), p2len)
     ca_map[AtomID(p1.residue(p1len-1).atom_index("CA"), p1len-1)] = AtomID(p2.residue(p2len-1).atom_index("CA"), p2len-1)
     ca_map[AtomID(p1.residue(p1len-2).atom_index("CA"), p1len-2)] = AtomID(p2.residue(p2len-2).atom_index("CA"), p2len-2)
+    ca_map_helix = map_core_id_AtomID_core_id_AtomID()
+    for i in range(1,ss_nres+1):
+      ca_map_helix[AtomID(p1.residue(i).atom_index("CA"), i)] = AtomID(p1.residue(i).atom_index("CA"), i)
     rmsd = 0.0
     for rms_calc_offset in [ 0.00000001, 0.0000001, 0.000001, 0.00001, 0.0001, ]:
+      p1pre = Pose()
+      p1pre.assign(p1)
       rmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1,p2, ca_map, rms_calc_offset, False, False)
-      if rmsd != 0.0: break
+      if rmsd == 0.0: continue
+      # align and use orig helix to superimpose translated helix since it may be corrupted 
+      hrmsd = pyrosetta.rosetta.core.scoring.superimpose_pose(p1pre,p1, ca_map_helix, 0.000001, False, False)
+      p1 = p1pre
+      break
     if verbose: print(f'helix to target superposition rmsd: {rmsd}')
     if rmsd == 0.0:
       if verbose: print(f'Skipping due to alignment error.')
