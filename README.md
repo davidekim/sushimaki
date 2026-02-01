@@ -11,9 +11,9 @@ Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed p
 Yong Hyun Kwon et. al. Topological reprogramming transforms an integral membrane oligosaccharyltransferase into a water-soluble glycosylation catalyst ([helix wrap](https://www.biorxiv.org/content/10.64898/2026.01.30.702934v1))
 
 ## Installation
-You can install, set up, and run this package from a [Google Colab Notebook](https://colab.research.google.com/github/davidekim/sushimaki/blob/main/sushimaki.ipynb)
+We recommend running this package from a [Google Colab Notebook](https://colab.research.google.com/github/davidekim/sushimaki/blob/main/sushimaki.ipynb).
 
-You can clone this repo into a preferred destination directory by going to that directory and then running:
+Alternatively, you can clone this repo into a preferred destination directory by going to that directory and then running:
 
 `git clone https://github.com/davidekim/sushimaki.git`
 
