@@ -30,8 +30,9 @@ warnings.filterwarnings('ignore')
 # algorithm for protein backbone reconstruction from alpha carbon coordinates. J. Comput. Chem., 28: 1593-1597. 
 # https://doi.org/10.1002/jcc.20624
 #
-# Reference for WRAPs
-#   Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science.
+# References for WRAPs
+#   Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science. (barrel wrap)
+#   Yong Hyun Kwon et. al. Topological reprogramming transforms an integral membrane oligosaccharyltransferase into a water-soluble glycosylation catalyst. (helix wrap)
 #
 # Reference for parametrically guided beta barrel backbone design:
 #   Kim DE. et al. 2024. Parametrically guided design of soluble beta barrels and transmembrane nanopores using deep learning.
