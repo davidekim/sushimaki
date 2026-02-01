@@ -5,8 +5,10 @@
 ## Description
 This repo includes utility scripts to generate helical or beta barrel WRAPs parametrically around a target protein.
 
-## Reference
-Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science.
+## References
+Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science. ([barrel wrap](https://www.biorxiv.org/content/10.1101/2025.02.04.636539v1))
+
+Yong Hyun Kwon et. al. Topological reprogramming transforms an integral membrane oligosaccharyltransferase into a water-soluble glycosylation catalyst ([helix wrap](https://www.biorxiv.org/content/10.64898/2026.01.30.702934v1))
 
 ## Installation
 You can install, set up, and run this package from a [Google Colab Notebook](https://colab.research.google.com/github/davidekim/sushimaki/blob/main/sushimaki.ipynb)
