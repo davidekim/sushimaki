@@ -6,7 +6,7 @@
 This repo includes utility scripts to generate helical or beta barrel WRAPs parametrically around a target protein.
 
 ## References
-Ljubica Mihaljević et. al. Solubilization of Membrane Proteins using designed protein WRAPS. Submitted to Science. ([barrel wrap](https://www.biorxiv.org/content/10.1101/2025.02.04.636539v1))
+Ljubica Mihaljević et al., Membrane protein solubilization and structure determination using de novo–designed proteins. Science 393, eadr3817 (2026). [DOI:10.1126/science.adr3817](https://www.science.org/doi/10.1126/science.adr3817)
 
 Yong Hyun Kwon et. al. Topological reprogramming transforms an integral membrane oligosaccharyltransferase into a water-soluble glycosylation catalyst ([helix wrap](https://www.biorxiv.org/content/10.64898/2026.01.30.702934v1))
 
